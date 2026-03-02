@@ -329,6 +329,12 @@ class ValueCaptureSession(PylinkEyetrackerSession):
         np.random.shuffle(iti1s)
         np.random.shuffle(iti2s)
 
+        # Feedback: exact count derived from feedback_probability, then shuffled
+        feedback_p = self.settings['design'].get('feedback_probability', 0.333)
+        n_feedback = round(n_trials * feedback_p)
+        show_feedbacks = np.array([True] * n_feedback + [False] * (n_trials - n_feedback))
+        np.random.shuffle(show_feedbacks)
+
         # PRF bar schedule: balanced across all positions, independent of task
         bar_schedule = self.get_bar_schedule(n_trials)
 
@@ -357,6 +363,7 @@ class ValueCaptureSession(PylinkEyetrackerSession):
                         distractor_present=dist_present,
                         bar_position=bar_pos,
                         bar_orientation=bar_ori,
+                        show_feedback=bool(show_feedbacks[ix]),
                     )
                 )
 
@@ -369,8 +376,6 @@ class ValueCaptureSession(PylinkEyetrackerSession):
                     draw_each_frame=False,
                 )
             )
-            self.trials.append(TotalPointsTrial(self, ix + 3))
-
             self.trials.append(TotalPointsTrial(self, ix + 3))
 
             run = self.settings['run']
@@ -410,6 +415,7 @@ class ValueCaptureSession(PylinkEyetrackerSession):
                         distractor_present=dist_present,
                         bar_position=bar_pos,
                         bar_orientation=bar_ori,
+                        show_feedback=bool(show_feedbacks[ix]),
                     )
                 )
 
