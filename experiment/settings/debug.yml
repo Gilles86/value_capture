@@ -1,0 +1,50 @@
+window:
+  size: [1512, 982]
+  pos: [0, 0]
+  color: '#646464'
+  fullscr: False
+  winType: pyglet
+  screen: 0
+  viewPos: [0, 0]
+  allowStencil: True
+
+monitor:
+  name: testMonitor
+  width: 34.0      # typical laptop screen width (cm)
+  distance: 60     # typical viewing distance (cm)
+  # gamma: 2.1
+
+design:
+  n_trials: 60          # minimum valid value: must be divisible by 60 (design) and 20 (bar positions)
+  feedback_probability: 1.0   # always show feedback so it's easy to test
+  n_runs: 6
+  n_bar_positions: 10
+
+mri:
+  TR: 1.6
+  TA: 2.0
+  sync: t
+  n_dummy_scans: 5
+
+experiment:
+  size_stimuli: 1.5
+  size_fixation: 0.25
+  eccentricity_stimulus: 4.0
+  stimulus_shift: -1.1
+  keys: ["a", "s"]    # [no-dot, dot] — laptop keys
+
+durations:
+  trial_start: 0.2
+  trial_wait: 0.2
+  target: 1.75            # 1750 ms matches osexp timeout
+  feedback: 0.5
+  iti1: [0.5]
+  iti2: [0.5]
+  blank: 0.5              # near-instant dummy scan blank
+
+various:
+  text_width: 20
+  text_height: 0.5
+  text_color: [1, 1, 1]
+  eyemovements_alert: False
+  gaze_threshold_deg: 1

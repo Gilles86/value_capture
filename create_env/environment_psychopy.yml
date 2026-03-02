@@ -1,0 +1,13 @@
+name: value_capture_psychopy
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    # Core PsychoPy and its dependencies (numpy, scipy, wxPython, pyglet, pandas…)
+    - psychopy==2025.2.4
+    # pygame as audio backend — do NOT install psychtoolbox (ptb crashes on macOS)
+    - pygame
+    # exptools2: install manually after env creation (see setup.sh)
+    #   pip install -e /path/to/abstract_values/libs/exptools2

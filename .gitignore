@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Experiment logs and output data
+experiment/logs/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Conda environments (if accidentally created inside repo)
+env/
+.env/
+
+# Editor
+.vscode/
+.idea/

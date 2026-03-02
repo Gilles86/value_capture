@@ -1,0 +1,23 @@
+name: value_capture_analysis
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  # Scientific stack via conda-forge for better binary compatibility
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - seaborn
+  - jupyterlab
+  - ipykernel
+  - ipywidgets
+  # Neuroimaging (for fMRI / PRF analysis)
+  - nibabel
+  - nilearn
+  - pip:
+    - pingouin      # stats
+    - pyyaml        # reading experiment settings/logs
+    - pyarrow       # fast parquet/csv I/O
+    - seaborn       # (pip version if conda-forge lags)

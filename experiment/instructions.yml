@@ -1,0 +1,141 @@
+intro: |
+  - INSTRUCTIONS -
+
+  In this experiment you will see arrays of coloured bars.
+
+  Your job on every trial is to find the bar that faces
+  a DIFFERENT direction from all the others.
+
+  |||||-||
+
+  Once you have found this unique bar, you need to report
+  whether it contains a small grey dot inside it.
+
+    - If it HAS a dot, press the 'left' button.
+    - If it does NOT have a dot, press the 'up' button.
+
+  The unique bar is always GREY.
+  A second, differently coloured bar will also appear —
+  this is a DISTRACTOR. Try to ignore it.
+
+  While you are doing this task it is very important
+  that you do NOT move your eyes!
+
+  -- Press any button to learn about the coloured distractor --
+
+
+value_colors: |
+  - THE COLOURED DISTRACTOR -
+
+  On MOST trials, one bar will have a distinctive colour.
+  This colour tells you how many points you can earn on
+  that trial if you respond correctly and quickly:
+
+    High-value colour  → up to 1000 points per trial
+    Medium-value colour → up to 500 points per trial
+    Low-value colour   → up to 100 points per trial
+
+  There are three possible colours: full green, amber/orange,
+  and bright orange. Which colour is high- vs low-value
+  depends on your participant number and stays the same
+  throughout the whole experiment.
+
+  On some trials there will be NO coloured distractor at all —
+  all bars will be grey. You still earn a small base reward
+  for a correct, fast response on those trials.
+
+  The faster and more accurately you respond,
+  the more points you earn.
+
+  You will be told your point total after each block!
+
+  -- Press any button to continue --
+
+
+bar: |
+  - THE MOVING CHECKERBOARD -
+
+  While the search array is on screen, a checkerboard bar
+  will slowly sweep across the middle of the display.
+
+  This bar is unrelated to your task — please ignore it.
+  We use it to measure your visual system while you work.
+
+  IMPORTANT: the bar only appears when the search array
+  does. There is no bar during the gaps between trials.
+
+  -- Press any button to continue --
+
+
+fix: |
+  - TIMING -
+
+  Between trials you will see a fixation dot.
+  Sometimes there will be a gap of a few seconds before
+  the next trial starts — just keep fixating and wait.
+
+  The block will start with about 15 seconds of fixation,
+  so at the very beginning just stare at the dot.
+
+  -- Press any button to continue --
+
+
+reminder: |
+  - REMINDER -
+
+  Your task:
+    1. Find the GREY bar with the unique orientation.
+    2. Report whether it contains a dot (left = dot, up = no dot).
+    3. The coloured bar is a DISTRACTOR — ignore it.
+
+  While doing this task it is extremely important that you
+  DO NOT MOVE YOUR EYES!
+
+  Moving your eyes means we have to discard the trial.
+  It is always better to get a trial wrong than to move.
+
+  When you are ready, press any button to start the trials.
+
+  -- WARNING: pressing a button now starts the experiment! --
+
+
+break: |
+  - TIME FOR A BREAK! -
+
+  You have completed a block of trials. Great job!
+
+  Take a moment to rest your eyes.
+
+  Press any button when you are ready to start the next block.
+
+
+fin: |
+  - YOU'RE FINISHED! -
+
+  You have completed the whole experimental session!
+
+  Thank you very much.
+
+  If this was training, the experimenter will let you know
+  whether your eye control was good enough for scanning.
+
+  If this was a scanning session, you will now be ejected
+  from the expensive magnetic tube.
+
+
+return:
+  text: |
+    - WELCOME BACK! -
+
+    Welcome to the scanning session of this experiment!
+
+    You will now do six blocks of the same task you practised
+    in the eye-tracker lab, but now inside the MRI scanner.
+
+    Remember:
+      - Find the GREY uniquely-oriented bar → report dot or not.
+      - The coloured distractor tells you how valuable the trial is.
+      - The PRF bar appears only while the search display is on screen.
+      - Do NOT move your eyes!
+
+    Press any button to jump back into the task!
