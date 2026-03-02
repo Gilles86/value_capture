@@ -753,3 +753,37 @@ class OutroTrial(Trial):
         self.session.fixation_dot.color = 'white'
         self.session.fixation_dot.draw()
         self.session.win.flip()
+
+
+class TotalPointsTrial(Trial):
+    """Shows total points earned this run; advances on any key press."""
+
+    def __init__(self, session, trial_nr, **kwargs):
+        super().__init__(
+            session,
+            trial_nr,
+            phase_durations=[np.inf],
+            phase_names=['total_points'],
+            **kwargs,
+        )
+        th = session.settings['experiment']['size_fixation'] * 3.0
+        self._text = visual.TextStim(
+            session.win,
+            text='',
+            color='white',
+            height=th,
+            pos=(0, session.stimulus_shift),
+            wrapWidth=20,
+        )
+
+    def draw(self):
+        self._text.text = (
+            f'Total points this run:\n{self.session.total_points}'
+        )
+        self._text.draw()
+        self.session.win.flip()
+
+    def get_events(self):
+        events = Trial.get_events(self)
+        for key, _ in (events or []):
+            self.stop_phase()

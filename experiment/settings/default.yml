@@ -42,7 +42,7 @@ durations:
   feedback: 1.0           # feedback / blank screen after iti1
   iti1: [1.0, 1.5, 2.0]  # first ITI segment (before feedback)
   iti2: [1.0, 1.5, 2.0]  # second ITI segment (after feedback)
-  blank: 14.3             # leading/trailing blank for MRI dummy scans
+  blank: 20.0             # leading/trailing fixation baseline (s)
 
 various:
   text_width: 20

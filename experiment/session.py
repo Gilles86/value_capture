@@ -11,6 +11,7 @@ from trial import (
     DummyWaiterTrial,
     WaitStartTriggerTrial,
     OutroTrial,
+    TotalPointsTrial,
 )
 from pathlib import Path
 import yaml
@@ -368,12 +369,15 @@ class ValueCaptureSession(PylinkEyetrackerSession):
                     draw_each_frame=False,
                 )
             )
+            self.trials.append(TotalPointsTrial(self, ix + 3))
+
+            self.trials.append(TotalPointsTrial(self, ix + 3))
 
             run = self.settings['run']
             n_runs = self.settings['design'].get('n_runs', 6)
             entry = self.instructions['fin'] if run == n_runs else self.instructions['break']
             text = entry.format(run=run)
-            self.trials.append(InstructionTrial(self, ix + 3, txt=text, image_path=None))
+            self.trials.append(InstructionTrial(self, ix + 4, txt=text, image_path=None))
 
         else:
             # Scanning: wait for MRI trigger

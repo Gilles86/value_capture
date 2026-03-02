@@ -341,21 +341,11 @@ class PRFBarStimulus:
         self.aperture.enabled = True
         self.bar.draw()
         self.aperture.enabled = False
-        self.background_circle.draw()
 
 
 class BackgroundCircle:
     def __init__(self, win, session, fov_size=20):
-        self.win = win
-        self.session = session
-        self.background_circle = visual.Circle(
-            win,
-            radius=fov_size / 2.0,
-            fillColor=None,
-            lineColor='darkgray',
-            lineWidth=5.0,
-            pos=(0, self.session.stimulus_shift),
-        )
+        pass
 
     def draw(self):
-        self.background_circle.draw()
+        pass
