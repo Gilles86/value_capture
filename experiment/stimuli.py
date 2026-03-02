@@ -345,7 +345,14 @@ class PRFBarStimulus:
 
 class BackgroundCircle:
     def __init__(self, win, session, fov_size=20):
-        pass
+        self.background_circle = visual.Circle(
+            win,
+            radius=fov_size / 2.0,
+            fillColor=None,
+            lineColor='darkgray',
+            lineWidth=5.0,
+            pos=(0, session.stimulus_shift),
+        )
 
     def draw(self):
-        pass
+        self.background_circle.draw()

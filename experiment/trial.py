@@ -92,6 +92,7 @@ class InstructionTrial(Trial):
                     self.stop_phase()
 
     def draw(self):
+        self.session.backgroundcircle.draw()
         if self.image:
             self.image.draw()
         self.text.draw()
@@ -237,8 +238,8 @@ class InstructionArrayTrial(Trial):
         super().run()
 
     def draw(self):
+        self.session.backgroundcircle.draw()
         if not self.show_value_legend:
-            self.session.backgroundcircle.draw()
             self.session.target_stimuli.draw()
             self.session.fixation_dot.color = 'white'
             self.session.fixation_dot.draw()
@@ -374,6 +375,7 @@ class SingletonTrial(Trial):
         self.stimulus_onset = None
 
     def draw(self):
+        self.session.backgroundcircle.draw()
         self.session.fixation_dot.color = 'white'
 
         if self.phase == 2:  # target phase: show search array + PRF bar
@@ -565,6 +567,7 @@ class SingletonTrial_training(SingletonTrial):
 
     def draw(self):
         self.trial_frame_count += 1
+        self.session.backgroundcircle.draw()
 
         if self.phase == 1:
             if self.session.eyetracker_on:
@@ -777,6 +780,7 @@ class TotalPointsTrial(Trial):
         )
 
     def draw(self):
+        self.session.backgroundcircle.draw()
         self._text.text = (
             f'Total points this run:\n{self.session.total_points}'
         )
