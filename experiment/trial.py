@@ -384,25 +384,18 @@ class SingletonTrial(Trial):
             self.session.target_stimuli.draw()
             self.session.prf_bar.draw()  # PRF bar only during target!
 
-        elif self.phase == 4:  # feedback phase
-            if self.parameters['show_feedback']:
-                correct = self.parameters['correct']
-                pts = self.parameters['earned_points']
-                base_h = self.session.settings['experiment']['size_fixation'] * 3.0
-                if np.isnan(correct):
-                    self.session.points_stimulus.text = 'Too late!'
-                    self.session.points_stimulus.color = 'white'
-                    self.session.points_stimulus.height = base_h * 0.55
-                elif not correct:
-                    self.session.points_stimulus.text = 'Incorrect!'
-                    self.session.points_stimulus.color = 'white'
-                    self.session.points_stimulus.height = base_h * 0.55
-                else:
-                    self.session.points_stimulus.text = f'+{pts}'
-                    self.session.points_stimulus.color = self._distractor_color_rgb
-                    self.session.points_stimulus.height = base_h
-                self.session.points_stimulus.draw()
-                return  # skip fixation so it doesn't overlap the text
+        elif self.phase == 4 and self.parameters['show_feedback']:  # feedback phase
+            stim = self.session.points_stimulus
+            stim.color = self._distractor_color_rgb
+            stim.height = self.session.settings['experiment']['size_fixation'] * 3.0
+            if np.isnan(self.parameters['correct']):
+                stim.text = '+0\nToo late!'
+            elif not self.parameters['correct']:
+                stim.text = '+0\nIncorrect!'
+            else:
+                stim.text = f'+{self.parameters["earned_points"]}'
+            stim.draw()
+            return
 
         self.session.fixation_dot.draw()
 
@@ -471,6 +464,7 @@ class SingletonTrial_training(SingletonTrial):
         dot_presence=None,
         **kwargs,
     ):
+        kwargs.pop('show_feedback', None)  # always True for training; drop if caller passed it
         super().__init__(
             session,
             trial_nr,
