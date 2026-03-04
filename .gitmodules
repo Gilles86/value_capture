@@ -1,0 +1,3 @@
+[submodule "experiment/deepmreye_calibration"]
+	path = experiment/deepmreye_calibration
+	url = https://github.com/Gilles86/deepmreye_calibration_exptools
