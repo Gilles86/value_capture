@@ -1,7 +1,7 @@
 import psychopy
 import pygame.mixer as _pgmixer
 
-from psychopy import visual, core
+from psychopy import visual, core, monitors
 from trial import (
     InstructionTrial,
     InstructionArrayTrial,
@@ -51,6 +51,11 @@ class ValueCaptureSession(PylinkEyetrackerSession):
             settings_file=settings_file,
             eyetracker_on=eyetracker_on,
         )
+        self.width_deg = 2 * np.degrees(
+            np.arctan(self.monitor.getWidth() / self.monitor.getDistance())
+        )
+        self.pix_per_deg = self.win.size[0] / self.width_deg
+
         self.mri_trigger = 't'
         self.show_eyetracker_calibration = calibrate_eyetracker
         self.stimulus_shift = self.settings['experiment']['stimulus_shift']
