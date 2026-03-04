@@ -669,6 +669,7 @@ class DummyWaiterTrial(Trial):
         self.session.fixation_dot.draw()
         if self.phase == 0:
             self._wait_text.draw()
+        self.session.win.flip()
 
     def get_events(self):
         events = Trial.get_events(self)
@@ -711,6 +712,7 @@ class WaitStartTriggerTrial(Trial):
         self.session.fixation_dot.color = 'white'
         self.session.fixation_dot.draw()
         self._wait_text.draw()
+        self.session.win.flip()
 
     def get_events(self):
         events = Trial.get_events(self)
@@ -745,6 +747,7 @@ class OutroTrial(Trial):
         self.session.backgroundcircle.draw()
         self.session.fixation_dot.color = 'white'
         self.session.fixation_dot.draw()
+        self.session.win.flip()
 
 
 class TotalPointsTrial(Trial):
@@ -774,6 +777,7 @@ class TotalPointsTrial(Trial):
             f'Total points this run:\n{self.session.total_points}'
         )
         self._text.draw()
+        self.session.win.flip()
 
     def get_events(self):
         events = Trial.get_events(self)
