@@ -167,6 +167,30 @@ python main.py 1 2 3
 python main.py 99 1 1 --settings debug --force_overwrite
 ```
 
+### Running a full scanning session (Windows / MRI scanner)
+
+Use the PowerShell script to run all runs of a session back-to-back:
+
+```powershell
+cd experiment
+.\run_session.ps1
+```
+
+The script will:
+1. Activate the `value_capture_psychopy` conda environment automatically
+2. Prompt for subject ID, session number, and number of runs (8 or 10)
+3. Optionally run the **DeepMREye calibration** (from `experiment/deepmreye_calibration/`) before the first task run
+4. Step through each run with a confirmation prompt — type `q` to abort early
+5. Offer a second DeepMREye calibration run at the end of the session
+
+#### First-time setup (submodule)
+
+The DeepMREye calibration lives in `experiment/deepmreye_calibration/` as a git submodule. After cloning the repository, initialise it with:
+
+```bash
+git submodule update --init
+```
+
 ### Output
 
 Logs are written to `experiment/logs/sub-XX/ses-Y/run-Z/` in BIDS-like naming:
