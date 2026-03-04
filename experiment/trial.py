@@ -751,13 +751,13 @@ class OutroTrial(Trial):
 
 
 class TotalPointsTrial(Trial):
-    """Shows total points earned this run; advances on any key press."""
+    """Shows total points earned this run for 5 seconds."""
 
     def __init__(self, session, trial_nr, **kwargs):
         super().__init__(
             session,
             trial_nr,
-            phase_durations=[np.inf],
+            phase_durations=[3.0],
             phase_names=['total_points'],
             **kwargs,
         )
@@ -778,9 +778,3 @@ class TotalPointsTrial(Trial):
         )
         self._text.draw()
         self.session.win.flip()
-
-    def get_events(self):
-        events = Trial.get_events(self)
-        for key, _ in (events or []):
-            if key != self.session.mri_trigger:
-                self.stop_phase()
