@@ -433,14 +433,13 @@ class SingletonTrial(Trial):
 
                     if self.parameters['correct']:
                         target_duration = self.session.settings['durations'].get('target', 1.5)
-                        base_points = max(
-                            0, round((1 - self.parameters['rt'] / target_duration) * 10)
-                        )
                         if self.parameters['distractor_present']:
                             multiplier = self.session.points_key[self.parameters['value_rank']]
                         else:
                             multiplier = 1  # no reward multiplier on absent trials
-                        self.parameters['earned_points'] = base_points * multiplier
+                        self.parameters['earned_points'] = max(
+                            0, round((1 - self.parameters['rt'] / target_duration) * 10 * multiplier)
+                        )
                         self.session.total_points += self.parameters['earned_points']
 
 
