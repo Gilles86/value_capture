@@ -611,9 +611,10 @@ class SingletonTrial_training(SingletonTrial):
 
 class BlankTrial(Trial):
 
-    def __init__(self, session, trial_nr, **kwargs):
-        blank_duration = session.settings['durations'].get('blank', 1)
-        phase_durations = [blank_duration]
+    def __init__(self, session, trial_nr, duration=None, **kwargs):
+        if duration is None:
+            duration = session.settings['durations'].get('blank', 1)
+        phase_durations = [duration]
         phase_names = ['blank']
 
         super().__init__(

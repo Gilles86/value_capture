@@ -15,7 +15,7 @@ monitor:
   # gamma: 2.1
 
 design:
-  n_trials: 60          # minimum valid value: must be divisible by 60 (design) and 20 (bar positions)
+  n_trials: 40          # must be divisible by 4 (conditions) and 20 (2×n_bar_positions)
   feedback_probability: 1.0   # always show feedback so it's easy to test
   n_runs: 6
   n_bar_positions: 10

@@ -49,14 +49,33 @@ Feedback messages:
 
 A flickering (8 Hz) checkerboard bar sits at a fixed position during the target phase. Positions are drawn from a balanced schedule: 10 horizontal × 10 vertical = 20 positions, each visited 3 times per 60-trial run. Bar and aperture are circular, centred at fixation.
 
-### Trial counts (60 trials per run)
+### Trial counts (40 trials per run)
 
 | Condition | N |
 |---|---|
-| Low value (× 1) | 15 |
-| Medium value (× 10) | 15 |
-| High value (× 100) | 15 |
-| Distractor absent | 15 |
+| Low value (× 1) | 10 |
+| Medium value (× 10) | 10 |
+| High value (× 100) | 10 |
+| Distractor absent | 10 |
+
+### Run duration
+
+A single run lasts exactly **5 min 30 s (330 s)**. The duration is deterministic: ITIs are tiled rather than independently sampled.
+
+| Component | Duration |
+|---|---|
+| Leading fixation baseline | 20 s |
+| Trials 1–13 (6.75 s avg each) | 87.75 s |
+| Rest pause | 10 s |
+| Trials 14–26 (6.75 s avg each) | 94.5 s |
+| Rest pause | 10 s |
+| Trials 27–40 (6.75 s avg each) | 87.75 s |
+| Trailing fixation baseline | 20 s |
+| **Total** | **330 s (5 min 30 s)** |
+
+Per-trial breakdown: 0.5 (trial start) + 0.5 (pre-target) + 1.75 (target) + 1.5 (ITI 1, mean) + 1.0 (feedback) + 1.5 (ITI 2, mean) = 6.75 s. ITIs are right-skewed: `[0.5, 0.75, 1.0, 1.0, 1.25, 1.5, 2.0, 4.0]` s (mean = 1.5 s, median = 1.125 s).
+
+A full scanning session of 10 runs is **3300 s (55 min)** of stimulus time, not counting inter-run setup.
 
 ## Sessions
 
@@ -65,7 +84,7 @@ A flickering (8 Hz) checkerboard bar sits at a fixed position during the target 
 | 1 | Practice in the eye-tracker lab. Starts on key press. All trials use `SingletonTrial_training` which beeps on excessive eye movements. Feedback shown on every trial. |
 | 2+ | fMRI scanning. Waits for the MRI `t` trigger (press twice: once to show a blank, once to start trials). Feedback shown on ~33% of trials. |
 
-Instructions are shown only on run 1 of each session.
+Instructions are shown only on run 1 of session 1 (practice). Scanning sessions (session ≥ 2) never show instructions.
 
 ## Repository Layout
 
@@ -163,10 +182,10 @@ Key parameters in `settings/default.yml` (scanner) and `settings/debug.yml` (lap
 
 | Key | Default | Debug | Description |
 |---|---|---|---|
-| `design.n_trials` | 60 | 60 | Trials per run (must be divisible by 4 and by 20) |
-| `design.feedback_probability` | 0.333 | 1.0 | Fraction of trials showing feedback |
+| `design.n_trials` | 40 | 40 | Trials per run (must be divisible by 4 and by 20) |
+| `design.feedback_probability` | 0.5 | 1.0 | Fraction of trials showing feedback |
 | `durations.target` | 1.75 | 1.75 | Response window (s) |
-| `durations.iti1/iti2` | [1.0,1.5,2.0] | [0.5] | ITI durations randomly drawn (s) |
+| `durations.iti1/iti2` | [0.5…4.0] | [0.5] | ITI durations tiled (s); right-skewed, mean = 1.5 s |
 | `experiment.keys` | `["y","b"]` | `["a","s"]` | [no-dot, dot] response keys |
 | `experiment.eccentricity_stimulus` | 4.0 | 4.0 | Search array eccentricity (°) |
 

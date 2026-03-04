@@ -39,7 +39,7 @@ def main(subject, session, run, settings='default', use_eyetracker=False, force_
         )
 
     settings_fn, _ = get_settings(settings)
-    include_instructions = (run == 1)
+    include_instructions = (run == 1) and (session == 1)
 
     run_session = ValueCaptureSession(
         output_str=output_str,
