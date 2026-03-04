@@ -22,7 +22,7 @@ def main(subject, session, run, settings='default', use_eyetracker=False, force_
     eyetracker_on = False
     calibrate_eyetracker = False
 
-    if session == 1:
+    if run < 0:
         eyetracker_on = use_eyetracker
         calibrate_eyetracker = use_eyetracker
 
@@ -39,7 +39,7 @@ def main(subject, session, run, settings='default', use_eyetracker=False, force_
         )
 
     settings_fn, _ = get_settings(settings)
-    include_instructions = (run == 1) and (session == 1)
+    include_instructions = run < 0
 
     run_session = ValueCaptureSession(
         output_str=output_str,

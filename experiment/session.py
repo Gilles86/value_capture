@@ -67,10 +67,17 @@ class ValueCaptureSession(PylinkEyetrackerSession):
         self.size_stimuli = self.settings['experiment'].get('size_stimuli', 1)
         self.radius_bar_aperture = self.eccentricity_stimuli - self.size_stimuli / 1.8
 
-        # Counterbalance value-color mapping by subject parity:
-        #   value_condition=0: rank 0 = full_green (lowest), rank 3 = full_orange (highest)
-        #   value_condition=1: rank 0 = full_orange (lowest), rank 3 = full_green (highest)
-        self.value_condition = subject % 2
+        # Counterbalance value-color mapping by subject × session:
+        #   value_condition=0: rank 0 = full_green (lowest), rank 2 = full_orange (highest)
+        #   value_condition=1: rank 0 = full_orange (lowest), rank 2 = full_green (highest)
+        # Odd subjects:  session 1 → green=high (cond 1), session 2 → orange=high (cond 0)
+        # Even subjects: session 1 → orange=high (cond 0), session 2 → green=high (cond 1)
+        if session == 1:
+            self.value_condition = subject % 2
+        elif session == 2:
+            self.value_condition = 1 - subject % 2
+        else:
+            raise ValueError(f'Session must be 1 or 2 (got {session}).')
         self.points_key = POINTS_KEY
         self.total_points = 0
 
@@ -338,12 +345,13 @@ class ValueCaptureSession(PylinkEyetrackerSession):
         # PRF bar schedule: balanced across all positions, independent of task
         bar_schedule = self.get_bar_schedule(n_trials)
 
-        TrialClass = SingletonTrial_training if self.settings['session'] == 1 else SingletonTrial
+        is_training = self.settings['run'] < 0
+        TrialClass = SingletonTrial_training if is_training else SingletonTrial
 
         rest1 = n_trials // 3
         rest2 = (2 * n_trials) // 3
 
-        if self.settings['session'] == 1:
+        if is_training:
             # Practice: wait for experimenter key press before starting
             self.trials.append(
                 InstructionTrial(

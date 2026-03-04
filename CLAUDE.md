@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 conda activate value_capture_psychopy
 cd experiment
 
-# Local testing (windowed, fast ITIs, feedback always shown)
-python main.py 99 1 1 --settings debug --force_overwrite
+# Local testing — training path (windowed, fast ITIs, feedback always shown, instructions shown)
+python main.py 99 1 -1 --settings debug --force_overwrite
 
 # Practice session (session=1, eye-tracker lab)
 python main.py <subject> 1 <run>
@@ -63,14 +63,19 @@ experiment/
 
 - `n_trials` must be divisible by **4** (equal counts: 3 value ranks + absent) and by **20** (2 × `n_bar_positions`; default 10). Minimum valid value: 60.
 - ITI lists (`iti1`, `iti2`) must evenly divide `n_trials`.
-- `session=1` → `SingletonTrial_training` (feedback always, eye-movement beeps); `session≥2` → `SingletonTrial` (feedback on ~33% of trials).
-- Instructions are shown only when `run == 1`.
+- **Run sign determines run type**: `run < 0` → training (`SingletonTrial_training`, feedback always, eye-movement beeps, show instructions, key-press start); `run > 0` → MRI (`SingletonTrial`, feedback on ~50% of trials, MRI trigger start).
+- **Session** (1 or 2 only; anything else raises `ValueError`) controls only the colour–value mapping.
 
 ## Value–Color Counterbalancing
 
-`value_condition = subject % 2` controls the rank→color mapping:
+`value_condition` is set from subject parity × session (1 or 2):
 - **condition 0**: rank 0 = `FULL_GREEN` (#00ab78), rank 1 = `MID_ORANGE` (#999253), rank 2 = `FULL_ORANGE` (#d56f2c)
 - **condition 1**: rank 0 = `FULL_ORANGE`, rank 1 = `MID_ORANGE`, rank 2 = `FULL_GREEN`
+
+| Subject | Session 1 | Session 2 |
+|---|---|---|
+| Odd | cond 1 (green=high) | cond 0 (orange=high) |
+| Even | cond 0 (orange=high) | cond 1 (green=high) |
 
 The target and all non-distractor items are always `GREY` (#8f8f8f). Points multipliers: `[1, 10, 100]` for ranks 0–2; absent trials earn 1×.
 

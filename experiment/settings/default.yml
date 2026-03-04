@@ -45,8 +45,8 @@ durations:
   blank: 20.0             # leading/trailing fixation baseline (s)
 
 various:
-  text_width: 20
-  text_height: 0.5
+  text_width: 10
+  text_height: 0.3
   text_color: [1, 1, 1]
   eyemovements_alert: True
   gaze_threshold_deg: 1

@@ -15,10 +15,10 @@ monitor:
   # gamma: 2.1
 
 design:
-  n_trials: 40          # must be divisible by 4 (conditions) and 20 (2×n_bar_positions)
+  n_trials: 4           # must be divisible by 4 (conditions) and 2×n_bar_positions
   feedback_probability: 1.0   # always show feedback so it's easy to test
   n_runs: 6
-  n_bar_positions: 10
+  n_bar_positions: 2
 
 mri:
   TR: 1.6
@@ -43,8 +43,8 @@ durations:
   blank: 0.5              # near-instant dummy scan blank
 
 various:
-  text_width: 20
-  text_height: 0.5
+  text_width: 10
+  text_height: 0.3
   text_color: [1, 1, 1]
   eyemovements_alert: False
   gaze_threshold_deg: 1

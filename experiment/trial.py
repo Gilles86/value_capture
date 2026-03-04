@@ -47,7 +47,7 @@ class InstructionTrial(Trial):
             self.text = TextStim(
                 session.win,
                 txt,
-                pos=(-4.0, 0.0),
+                pos=(-2.0, 0.0),
                 height=txt_height,
                 wrapWidth=txt_width,
                 color=txt_color,
@@ -68,7 +68,7 @@ class InstructionTrial(Trial):
         self.text2 = TextStim(
             session.win,
             bottom_txt,
-            pos=(0.0, -6.0),
+            pos=(0.0, -3.0),
             height=txt_height,
             wrapWidth=txt_width,
             color=txt_color,
@@ -77,7 +77,7 @@ class InstructionTrial(Trial):
         self.image = None
         if image_path is not None and op.exists(image_path):
             self.image = ImageStim(
-                session.win, image=image_path, pos=(6, 0), size=(10, 10), units='deg'
+                session.win, image=image_path, pos=(3, 0), size=(5, 5), units='deg'
             )
 
     def get_events(self):
@@ -145,12 +145,12 @@ class InstructionArrayTrial(Trial):
         self.main_text = visual.TextStim(
             session.win,
             txt,
-            pos=(-9.5, 1.5),
+            pos=(-4.0, 1.5),
             height=th,
-            wrapWidth=4.5,
+            wrapWidth=5.0,
             color=tc,
             alignText='left',
-            anchorHoriz='left',
+            anchorHoriz='center',
         )
         lowest_item_y = min(pos[1] for pos in session.target_stimuli.positions)
         continue_y = lowest_item_y - session.size_stimuli - 0.3
@@ -387,7 +387,7 @@ class SingletonTrial(Trial):
         elif self.phase == 4 and self.parameters['show_feedback']:  # feedback phase
             stim = self.session.points_stimulus
             stim.color = self._distractor_color_rgb
-            stim.height = self.session.settings['experiment']['size_fixation'] * 3.0
+            stim.height = self.session.settings['experiment']['size_fixation'] * 1.5
             if np.isnan(self.parameters['correct']):
                 stim.text = '+0\nToo late!'
             elif not self.parameters['correct']:
@@ -434,7 +434,7 @@ class SingletonTrial(Trial):
                     if self.parameters['correct']:
                         target_duration = self.session.settings['durations'].get('target', 1.5)
                         base_points = max(
-                            0, round((1 - self.parameters['rt'] / target_duration) * 100)
+                            0, round((1 - self.parameters['rt'] / target_duration) * 10)
                         )
                         if self.parameters['distractor_present']:
                             multiplier = self.session.points_key[self.parameters['value_rank']]
@@ -590,20 +590,17 @@ class SingletonTrial_training(SingletonTrial):
         elif self.phase == 4:  # feedback (always shown during practice)
             correct = self.parameters['correct']
             pts = self.parameters['earned_points']
-            base_h = self.session.settings['experiment']['size_fixation'] * 3.0
+            base_h = self.session.settings['experiment']['size_fixation'] * 1.5
+            stim = self.session.points_stimulus
+            stim.color = self._distractor_color_rgb
+            stim.height = base_h
             if np.isnan(correct):
-                self.session.points_stimulus.text = 'Too late!'
-                self.session.points_stimulus.color = 'white'
-                self.session.points_stimulus.height = base_h * 0.55
+                stim.text = '+0\nToo late!'
             elif not correct:
-                self.session.points_stimulus.text = 'Incorrect!'
-                self.session.points_stimulus.color = 'white'
-                self.session.points_stimulus.height = base_h * 0.55
+                stim.text = '+0\nIncorrect!'
             else:
-                self.session.points_stimulus.text = f'+{pts}'
-                self.session.points_stimulus.color = self._distractor_color_rgb
-                self.session.points_stimulus.height = base_h
-            self.session.points_stimulus.draw()
+                stim.text = f'+{pts}'
+            stim.draw()
             return  # skip fixation so it doesn't overlap the text
 
         self.session.fixation_dot.draw()
@@ -672,7 +669,6 @@ class DummyWaiterTrial(Trial):
         self.session.fixation_dot.draw()
         if self.phase == 0:
             self._wait_text.draw()
-        self.session.win.flip()
 
     def get_events(self):
         events = Trial.get_events(self)
@@ -715,7 +711,6 @@ class WaitStartTriggerTrial(Trial):
         self.session.fixation_dot.color = 'white'
         self.session.fixation_dot.draw()
         self._wait_text.draw()
-        self.session.win.flip()
 
     def get_events(self):
         events = Trial.get_events(self)
@@ -750,7 +745,6 @@ class OutroTrial(Trial):
         self.session.backgroundcircle.draw()
         self.session.fixation_dot.color = 'white'
         self.session.fixation_dot.draw()
-        self.session.win.flip()
 
 
 class TotalPointsTrial(Trial):
@@ -780,7 +774,6 @@ class TotalPointsTrial(Trial):
             f'Total points this run:\n{self.session.total_points}'
         )
         self._text.draw()
-        self.session.win.flip()
 
     def get_events(self):
         events = Trial.get_events(self)

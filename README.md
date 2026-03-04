@@ -29,7 +29,14 @@ On 75% of trials one bar has a distinctive colour (the **distractor**). Its colo
 | Olive/khaki `#999253` | × 10 (medium) |
 | Full orange `#d56f2c` | × 100 (high) |
 
-The green–orange assignment is counterbalanced across subjects by parity (`subject % 2`). The three colours are equally spaced in CIELAB (ΔE ≈ 46.5 to each endpoint).
+The green–orange assignment is counterbalanced by subject parity and session:
+
+| Subject | Session 1 | Session 2 |
+|---|---|---|
+| Odd | Green = high value | Orange = high value |
+| Even | Orange = high value | Green = high value |
+
+The three colours are equally spaced in CIELAB (ΔE ≈ 46.5 to each endpoint).
 
 On 25% of trials no distractor is present (absent condition); those trials earn 1× points.
 
@@ -77,14 +84,16 @@ Per-trial breakdown: 0.5 (trial start) + 0.5 (pre-target) + 1.75 (target) + 1.5 
 
 A full scanning session of 10 runs is **3300 s (55 min)** of stimulus time, not counting inter-run setup.
 
-## Sessions
+## Sessions and runs
 
-| Session | Description |
-|---|---|
-| 1 | Practice in the eye-tracker lab. Starts on key press. All trials use `SingletonTrial_training` which beeps on excessive eye movements. Feedback shown on every trial. |
-| 2+ | fMRI scanning. Waits for the MRI `t` trigger (press twice: once to show a blank, once to start trials). Feedback shown on ~33% of trials. |
+The **session number** (1 or 2) controls only the colour–value mapping (see above). Any session number other than 1 or 2 raises an error.
 
-Instructions are shown only on run 1 of session 1 (practice). Scanning sessions (session ≥ 2) never show instructions.
+The **run number sign** controls the run type:
+
+| Run number | Type | Trial class | Instructions | Start |
+|---|---|---|---|---|
+| Negative (e.g. `-1`) | Training | `SingletonTrial_training` — beeps on excessive eye movements, feedback always shown | Shown | Experimenter key press |
+| Positive (e.g. `1`) | MRI scanning | `SingletonTrial` — feedback on ~50% of trials | Not shown | MRI `t` trigger |
 
 ## Repository Layout
 
