@@ -782,4 +782,5 @@ class TotalPointsTrial(Trial):
     def get_events(self):
         events = Trial.get_events(self)
         for key, _ in (events or []):
-            self.stop_phase()
+            if key != self.session.mri_trigger:
+                self.stop_phase()

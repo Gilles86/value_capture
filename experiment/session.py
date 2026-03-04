@@ -448,3 +448,4 @@ class ValueCaptureSession(PylinkEyetrackerSession):
                     draw_each_frame=False,
                 )
             )
+            self.trials.append(TotalPointsTrial(self, ix + 3))
