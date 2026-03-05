@@ -55,6 +55,7 @@ class ValueCaptureSession(PylinkEyetrackerSession):
             np.arctan(self.monitor.getWidth() / self.monitor.getDistance())
         )
         self.pix_per_deg = self.win.size[0] / self.width_deg
+        self.pix_stimulus_shift = self.settings['experiment']['stimulus_shift'] * self.pix_per_deg
 
         self.mri_trigger = 't'
         self.show_eyetracker_calibration = calibrate_eyetracker
