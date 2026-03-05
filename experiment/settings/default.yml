@@ -31,7 +31,7 @@ experiment:
   size_stimuli: 1.5       # size of search items (visual degrees)
   size_fixation: 0.25     # size of fixation dot (visual degrees)
   eccentricity_stimulus: 4.0  # eccentricity of search array (visual degrees)
-  stimulus_shift: 0.0    # shift entire display downward (visual degrees)
+  stimulus_shift: -1.1    # shift entire display downward (visual degrees)
   keys: ["y", "b"]        # [no-dot, dot] — Spinoza scanner keys
   # keys: ["up", "left"]  # [no-dot, dot] — behavioural lab keys
 
