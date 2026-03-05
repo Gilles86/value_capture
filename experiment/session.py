@@ -211,6 +211,8 @@ class ValueCaptureSession(PylinkEyetrackerSession):
         if include_instructions:
             k_dot   = self.settings['experiment']['keys'][1]  # dot key
             k_nodot = self.settings['experiment']['keys'][0]  # no-dot key
+            k_dot_label   = self.settings['experiment'].get('key_label_dot',   f"'{k_dot}'")
+            k_nodot_label = self.settings['experiment'].get('key_label_nodot', f"'{k_nodot}'")
             high_color = self.get_distractor_color(2)
 
             self.trials = [
@@ -234,12 +236,13 @@ class ValueCaptureSession(PylinkEyetrackerSession):
                         'Report whether the\n'
                         'unique bar has a small\n'
                         'dot inside it.\n\n'
-                        f'Dot present:\n'
-                        f"press '{k_dot}'"
+                        f'Dot present →\n'
+                        f'press {k_dot_label}'
                     ),
                     target_loc=3, target_ori=0.0,
                     dot_locs=[3],
                     highlight_loc=3,
+                    keys=[k_dot],
                 ),
                 # 3 — no dot
                 InstructionArrayTrial(
@@ -247,11 +250,13 @@ class ValueCaptureSession(PylinkEyetrackerSession):
                     txt=(
                         'If there is NO dot\n'
                         'inside the unique bar:\n\n'
-                        f"press '{k_nodot}'"
+                        f'No dot →\n'
+                        f'press {k_nodot_label}'
                     ),
                     target_loc=3, target_ori=0.0,
                     dot_locs=[],
                     highlight_loc=3,
+                    keys=[k_nodot],
                 ),
                 # 4 — coloured distractor
                 InstructionArrayTrial(
@@ -289,8 +294,8 @@ class ValueCaptureSession(PylinkEyetrackerSession):
                         'Ready!\n\n'
                         'Find the grey bar\n'
                         'and report dot or not.\n\n'
-                        f"'{k_dot}' = dot\n"
-                        f"'{k_nodot}' = no dot\n\n"
+                        f'{k_dot_label} = dot\n'
+                        f'{k_nodot_label} = no dot\n\n'
                         'Press any button\n'
                         'to start.'
                     ),
