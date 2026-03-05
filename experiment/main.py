@@ -22,11 +22,11 @@ def main(subject, session, run, settings='default', use_eyetracker=False, force_
     eyetracker_on = False
     calibrate_eyetracker = False
 
-    if run < 0:
-        eyetracker_on = use_eyetracker
-        calibrate_eyetracker = use_eyetracker
+    eyetracker_on = use_eyetracker
+    calibrate_eyetracker = use_eyetracker
 
-    output_dir, output_str = get_output_dir_str(subject, session, 'val_cap', run)
+    output_dir, output_str = get_output_dir_str(
+        subject, session, 'val_cap', run)
 
     if os.path.exists(output_dir) and not force_overwrite:
         raise ValueError(
@@ -63,11 +63,16 @@ def main(subject, session, run, settings='default', use_eyetracker=False, force_
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument('subject', type=int, help='Subject number')
-    argparser.add_argument('session', type=int, help='Session (1=practice, 2+=scanning)')
+    argparser.add_argument('session', type=int,
+                           help='Session (1=practice, 2+=scanning)')
     argparser.add_argument('run', type=int, help='Run number')
-    argparser.add_argument('--settings', type=str, default='default', help='Settings label')
-    argparser.add_argument('--use_eyetracker', action='store_true', help='Enable eyetracker')
-    argparser.add_argument('--force_overwrite', action='store_true', help='Overwrite existing output directory (useful for testing)')
+    argparser.add_argument('--settings', type=str,
+                           default='default', help='Settings label')
+    argparser.add_argument(
+        '--use_eyetracker', action='store_true', help='Enable eyetracker')
+    argparser.add_argument('--force_overwrite', action='store_true',
+                           help='Overwrite existing output directory (useful for testing)')
 
     args = argparser.parse_args()
-    main(args.subject, args.session, args.run, args.settings, args.use_eyetracker, args.force_overwrite)
+    main(args.subject, args.session, args.run, args.settings,
+         args.use_eyetracker, args.force_overwrite)
