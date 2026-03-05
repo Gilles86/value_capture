@@ -129,6 +129,7 @@ class InstructionArrayTrial(Trial):
         dot_locs=None,
         highlight_loc=None,
         show_value_legend=False,
+        keys=None,
         **kwargs,
     ):
         super().__init__(
@@ -141,6 +142,7 @@ class InstructionArrayTrial(Trial):
 
         th = session.settings['various'].get('text_height', 0.5)
         tc = session.settings['various'].get('text_color', 'white')
+        self.keys = keys
 
         self.main_text = visual.TextStim(
             session.win,
@@ -154,9 +156,13 @@ class InstructionArrayTrial(Trial):
         )
         lowest_item_y = min(pos[1] for pos in session.target_stimuli.positions)
         continue_y = lowest_item_y - session.size_stimuli - 0.3
+        if keys is not None and len(keys) == 1:
+            continue_txt = f"Press '{keys[0]}' to continue"
+        else:
+            continue_txt = 'Press any button to continue'
         self.continue_text = visual.TextStim(
             session.win,
-            'Press any button to continue',
+            continue_txt,
             pos=(0, continue_y),
             height=th,
             color=tc,
@@ -223,8 +229,13 @@ class InstructionArrayTrial(Trial):
 
     def get_events(self):
         events = Trial.get_events(self)
-        if events:
-            self.stop_phase()
+        if self.keys is None:
+            if events:
+                self.stop_phase()
+        else:
+            for key, t in events:
+                if key in self.keys:
+                    self.stop_phase()
 
     def run(self):
         if not self.show_value_legend:

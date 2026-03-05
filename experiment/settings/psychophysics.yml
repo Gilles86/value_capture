@@ -1,0 +1,55 @@
+window:
+  size: [1920, 1080]
+  pos: [0, 0]
+  color: '#646464'
+  fullscr: True
+  winType: pyglet
+  screen: 1
+  viewPos: [0, 0]
+  allowStencil: True
+
+monitor:
+  name: Spinoza_7T
+  width: 70.9      # width of monitor (in cm)
+  distance: 196    # distance of participant from monitor (in cm)
+  gamma: 1.0
+
+design:
+  n_trials: 40          # must be divisible by 4 (conditions) and 20 (2×n_bar_positions)
+                        # 30 distractor-present (3 ranks × 10 each) + 10 absent
+  feedback_probability: 0.5   # fraction of scanning trials showing points feedback
+  n_runs: 6
+  n_bar_positions: 10   # positions per direction; 10 horiz + 10 vert = 20 total → 40/20 = 2 reps each
+
+mri:
+  TR: 1.6
+  TA: 2.0
+  sync: t
+  n_dummy_scans: 5
+
+experiment:
+  size_stimuli: 1.5       # size of search items (visual degrees)
+  size_fixation: 0.25     # size of fixation dot (visual degrees)
+  eccentricity_stimulus: 4.0  # eccentricity of search array (visual degrees)
+  stimulus_shift: -1.1    # shift entire display downward (visual degrees)
+  keys: ["s", "a"]        # [no-dot, dot] — psychophysics lab response box
+  key_label_dot: "green index finger (a)"    # shown in instructions
+  key_label_nodot: "red middle finger (s)"   # shown in instructions
+
+durations:
+  trial_start: 0.5        # brief fixation before pre-target period
+  trial_wait: 0.5         # pre-target fixation (cue period)
+  target: 1.75            # search array on-screen; 1750 ms matches osexp timeout
+  feedback: 1.0           # feedback / blank screen after iti1
+  iti1: [0.5, 0.75, 1.0, 1.0, 1.25, 1.5, 2.0, 4.0]  # first ITI segment (before feedback); mean=1.5s, right-skewed
+  iti2: [0.5, 0.75, 1.0, 1.0, 1.25, 1.5, 2.0, 4.0]  # second ITI segment (after feedback); mean=1.5s, right-skewed
+  blank: 20.0             # leading/trailing fixation baseline (s)
+
+various:
+  text_width: 10
+  text_height: 0.3
+  text_color: [1, 1, 1]
+  eyemovements_alert: True
+  gaze_threshold_deg: 1
+
+# eyetracker: True        # uncomment to enable Eyelink
