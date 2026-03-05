@@ -582,7 +582,7 @@ class SingletonTrial_training(SingletonTrial):
 
         if self.phase == 2:  # target + PRF bar
             if self.stimulus_onset is None:
-                self.stimulus_onset = core.getTime()
+                self.stimulus_onset = self.session.clock.getTime()
             self.session.target_stimuli.draw()
             self.session.prf_bar.draw()
 
