@@ -443,16 +443,7 @@ class SingletonTrial(Trial):
                     self.responded = True
 
                     if self.parameters['correct']:
-<<<<<<< HEAD
                         target_duration = self.session.settings['durations'].get('target', 1.5)
-=======
-                        target_duration = self.session.settings['durations'].get(
-                            'target', 1.5)
-                        base_points = max(
-                            0, round(
-                                (1 - self.parameters['rt'] / target_duration) * 10)
-                        )
->>>>>>> 5605773 (Cleanup code)
                         if self.parameters['distractor_present']:
                             multiplier = self.session.points_key[self.parameters['value_rank']]
                         else:
