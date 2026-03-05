@@ -172,7 +172,7 @@ class InstructionArrayTrial(Trial):
             if (dist_loc is not None and dist_color_rgb is not None)
             else GREY_RGB
         )
-        self._dist_loc   = dist_loc
+        self._dist_loc = dist_loc
         self._target_loc = target_loc
         self._target_ori = target_ori
         self._dot_presence = dot_presence
@@ -192,7 +192,7 @@ class InstructionArrayTrial(Trial):
 
         # --- value-legend bars (show_value_legend=True) ---
         self.show_value_legend = show_value_legend
-        self.legend_bars   = []
+        self.legend_bars = []
         self.legend_labels = []
         if show_value_legend:
             entries = [
@@ -285,8 +285,10 @@ class SingletonTrial(Trial):
         bar_orientation='horizontal',
         **kwargs,
     ):
-        trial_start_duration = session.settings['durations'].get('trial_start', 0.5)
-        pre_target_duration = session.settings['durations'].get('trial_wait', 0.5)
+        trial_start_duration = session.settings['durations'].get(
+            'trial_start', 0.5)
+        pre_target_duration = session.settings['durations'].get(
+            'trial_wait', 0.5)
         target_duration = session.settings['durations'].get('target', 1.5)
         feedback_duration = session.settings['durations'].get('feedback', 1.0)
 
@@ -298,7 +300,8 @@ class SingletonTrial(Trial):
             feedback_duration,
             iti2,
         ]
-        phase_names = ['trial_start', 'pre_target', 'target', 'iti1', 'feedback', 'iti2']
+        phase_names = ['trial_start', 'pre_target',
+                       'target', 'iti1', 'feedback', 'iti2']
 
         super().__init__(
             session,
@@ -316,17 +319,20 @@ class SingletonTrial(Trial):
         if value_rank is None and distractor_present:
             self.parameters['value_rank'] = np.random.choice([0, 1, 2])
         else:
-            self.parameters['value_rank'] = value_rank  # may be None for absent trials
+            # may be None for absent trials
+            self.parameters['value_rank'] = value_rank
 
         self.parameters['target_orientation'] = (
-            np.random.choice([0.0, 90.0]) if target_orientation is None else target_orientation
+            np.random.choice(
+                [0.0, 90.0]) if target_orientation is None else target_orientation
         )
 
         # distractor_location is None on absent trials (no coloured item)
         if not distractor_present:
             self.parameters['distractor_location'] = None
         elif distractor_location is None:
-            self.parameters['distractor_location'] = np.random.choice([1, 3, 5, 7])
+            self.parameters['distractor_location'] = np.random.choice([
+                                                                      1, 3, 5, 7])
         else:
             self.parameters['distractor_location'] = distractor_location
 
@@ -339,10 +345,12 @@ class SingletonTrial(Trial):
                 dot_presence[i] = True
         # Store as instance attribute for drawing; log as bitmask string (lists break pandas .loc)
         self._dot_presence = dot_presence
-        self.parameters['dot_presence'] = ''.join('1' if d else '0' for d in dot_presence)
+        self.parameters['dot_presence'] = ''.join(
+            '1' if d else '0' for d in dot_presence)
 
         if target_location is None:
-            exclude = self.parameters['distractor_location']  # may be None → no exclusion
+            # may be None → no exclusion
+            exclude = self.parameters['distractor_location']
             self.parameters['target_location'] = np.random.choice(
                 [i for i in [1, 3, 5, 7] if i != exclude]
             )
@@ -355,7 +363,8 @@ class SingletonTrial(Trial):
 
         # Whether to show feedback this trial (33% during scanning, 100% in practice)
         if show_feedback is None:
-            feedback_p = session.settings['design'].get('feedback_probability', 0.333)
+            feedback_p = session.settings['design'].get(
+                'feedback_probability', 0.333)
             self.parameters['show_feedback'] = np.random.random() < feedback_p
         else:
             self.parameters['show_feedback'] = show_feedback
@@ -366,7 +375,8 @@ class SingletonTrial(Trial):
         self._distractor_color_rgb = session.get_distractor_color(
             self.parameters['value_rank']  # None → returns GREY_RGB
         )
-        self.parameters['distractor_color_rgb'] = str(self._distractor_color_rgb)
+        self.parameters['distractor_color_rgb'] = str(
+            self._distractor_color_rgb)
 
         self.parameters['bar_position'] = bar_position
         self.parameters['bar_orientation'] = bar_orientation
@@ -384,7 +394,8 @@ class SingletonTrial(Trial):
             self.session.target_stimuli.draw()
             self.session.prf_bar.draw()  # PRF bar only during target!
 
-        elif self.phase == 4 and self.parameters['show_feedback']:  # feedback phase
+        # feedback phase
+        elif self.phase == 4 and self.parameters['show_feedback']:
             stim = self.session.points_stimulus
             stim.color = self._distractor_color_rgb
             stim.height = self.session.settings['experiment']['size_fixation'] * 1.5
@@ -432,7 +443,16 @@ class SingletonTrial(Trial):
                     self.responded = True
 
                     if self.parameters['correct']:
+<<<<<<< HEAD
                         target_duration = self.session.settings['durations'].get('target', 1.5)
+=======
+                        target_duration = self.session.settings['durations'].get(
+                            'target', 1.5)
+                        base_points = max(
+                            0, round(
+                                (1 - self.parameters['rt'] / target_duration) * 10)
+                        )
+>>>>>>> 5605773 (Cleanup code)
                         if self.parameters['distractor_present']:
                             multiplier = self.session.points_key[self.parameters['value_rank']]
                         else:
@@ -463,7 +483,8 @@ class SingletonTrial_training(SingletonTrial):
         dot_presence=None,
         **kwargs,
     ):
-        kwargs.pop('show_feedback', None)  # always True for training; drop if caller passed it
+        # always True for training; drop if caller passed it
+        kwargs.pop('show_feedback', None)
         super().__init__(
             session,
             trial_nr,
