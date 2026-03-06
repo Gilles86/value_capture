@@ -676,21 +676,10 @@ class DummyWaiterTrial(Trial):
             draw_each_frame=draw_each_frame,
             **kwargs,
         )
-        th = session.settings['various'].get('text_height', 0.5)
-        self._wait_text = visual.TextStim(
-            session.win,
-            'Waiting for scanner trigger...\n\n(press t to simulate)',
-            pos=(0, 0),
-            height=th,
-            color='white',
-        )
-
     def draw(self):
         self.session.backgroundcircle.draw()
         self.session.fixation_dot.color = 'white'
         self.session.fixation_dot.draw()
-        if self.phase == 0:
-            self._wait_text.draw()
         self.session.win.flip()
 
     def get_events(self):
@@ -720,20 +709,10 @@ class WaitStartTriggerTrial(Trial):
             phase_names,
             draw_each_frame=draw_each_frame,
         )
-        th = session.settings['various'].get('text_height', 0.5)
-        self._wait_text = visual.TextStim(
-            session.win,
-            'Waiting for scanner trigger...\n\n(press t to simulate)',
-            pos=(0, 0),
-            height=th,
-            color='white',
-        )
-
     def draw(self):
         self.session.backgroundcircle.draw()
         self.session.fixation_dot.color = 'white'
         self.session.fixation_dot.draw()
-        self._wait_text.draw()
         self.session.win.flip()
 
     def get_events(self):
