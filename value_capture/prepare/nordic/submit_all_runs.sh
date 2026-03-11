@@ -19,14 +19,16 @@ JOB_IDS=""
 
 # 8 valuecapture runs
 for RUN in {1..8}; do
-    JOB_ID=$(sbatch --parsable "$SCRIPT_DIR/submit_nordic_job.sh" \
+    JOB_ID=$(sbatch --parsable --export=ALL,NORDIC_DIR="$SCRIPT_DIR" \
+        "$SCRIPT_DIR/submit_nordic_job.sh" \
         -s "$SUBJECT" -r "$RUN" -e "$SESSION" -t "valuecapture")
     echo "Submitted NORDIC valuecapture run $RUN → job $JOB_ID" >&2
     JOB_IDS="${JOB_IDS}:${JOB_ID}"
 done
 
 # 1 deepmreye run
-JOB_ID=$(sbatch --parsable "$SCRIPT_DIR/submit_nordic_job.sh" \
+JOB_ID=$(sbatch --parsable --export=ALL,NORDIC_DIR="$SCRIPT_DIR" \
+    "$SCRIPT_DIR/submit_nordic_job.sh" \
     -s "$SUBJECT" -r 1 -e "$SESSION" -t "deepmreye")
 echo "Submitted NORDIC deepmreye run 1 → job $JOB_ID" >&2
 JOB_IDS="${JOB_IDS}:${JOB_ID}"

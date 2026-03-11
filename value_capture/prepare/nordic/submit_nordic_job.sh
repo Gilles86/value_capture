@@ -30,11 +30,11 @@ if [ -z "$SUBJECT" ] || [ -z "$RUN" ]; then
     exit 1
 fi
 
-# Build the MATLAB command
+# NORDIC_DIR is passed via --export=ALL,NORDIC_DIR=... at submission time
 if [ -z "$SESSION" ]; then
-    MATLAB_CMD="addpath('$(dirname "$0")'); run_nordic('$SUBJECT', $RUN, '$BASE_PATH', [], '$TASK'); exit"
+    MATLAB_CMD="addpath('${NORDIC_DIR}'); run_nordic('$SUBJECT', $RUN, '$BASE_PATH', [], '$TASK'); exit"
 else
-    MATLAB_CMD="addpath('$(dirname "$0")'); run_nordic('$SUBJECT', $RUN, '$BASE_PATH', $SESSION, '$TASK'); exit"
+    MATLAB_CMD="addpath('${NORDIC_DIR}'); run_nordic('$SUBJECT', $RUN, '$BASE_PATH', $SESSION, '$TASK'); exit"
 fi
 
 matlab -nodisplay -r "$MATLAB_CMD"
