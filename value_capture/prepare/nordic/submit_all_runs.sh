@@ -21,14 +21,14 @@ JOB_IDS=""
 for RUN in {1..8}; do
     JOB_ID=$(sbatch --parsable "$SCRIPT_DIR/submit_nordic_job.sh" \
         -s "$SUBJECT" -r "$RUN" -e "$SESSION" -t "valuecapture")
-    echo "Submitted NORDIC valuecapture run $RUN → job $JOB_ID"
+    echo "Submitted NORDIC valuecapture run $RUN → job $JOB_ID" >&2
     JOB_IDS="${JOB_IDS}:${JOB_ID}"
 done
 
 # 1 deepmreye run
 JOB_ID=$(sbatch --parsable "$SCRIPT_DIR/submit_nordic_job.sh" \
     -s "$SUBJECT" -r 1 -e "$SESSION" -t "deepmreye")
-echo "Submitted NORDIC deepmreye run 1 → job $JOB_ID"
+echo "Submitted NORDIC deepmreye run 1 → job $JOB_ID" >&2
 JOB_IDS="${JOB_IDS}:${JOB_ID}"
 
 # Strip leading colon and print for use as dependency string

@@ -2,11 +2,16 @@ import argparse
 import json
 import re
 import shutil
+import time
+from datetime import datetime
 from pathlib import Path
 
 import nibabel as nib
 from nilearn import image
-from tqdm import tqdm
+
+
+def _log(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
 BOLD_JSON = {
@@ -47,16 +52,19 @@ def main(subject, session, bids_dir):
     target_dir = bids_dir / f"sub-{subject:02d}" / f"ses-{session}"
     target_dir.mkdir(parents=True, exist_ok=True)
 
+    t0 = time.time()
+    _log(f"Starting sub-{subject:02d} ses-{session}")
+
     _convert_anat(subject, session, source_dir, target_dir)
     _convert_func(subject, session, source_dir, target_dir)
     _convert_fmap(subject, session, source_dir, target_dir)
     _convert_behavior(subject, session, bids_dir, target_dir)
 
-    print(f"\nDone: sub-{subject:02d} ses-{session}")
+    _log(f"Done: sub-{subject:02d} ses-{session}  (total {time.time()-t0:.0f}s)")
 
 
 def _convert_anat(subject, session, source_dir, target_dir):
-    print("\n--- Anatomical ---")
+    _log("--- Anatomical ---")
     anat_dir = target_dir / "anat"
     anat_dir.mkdir(exist_ok=True)
 
@@ -64,24 +72,24 @@ def _convert_anat(subject, session, source_dir, target_dir):
     ses = f"ses-{session}"
 
     if session == 1:
-        # _1.PAR: 4 vols — inv-1 and inv-2 (magnitude and phase each)
         candidates = list(source_dir.glob("*acq-MP2_085mm*_1.PAR"))
-        print(f"Found {len(candidates)} MP2RAGE (_1) candidates")
         assert len(candidates) in [0, 1]
         if candidates:
+            _log(f"  Loading MP2RAGE: {candidates[0].name}")
+            t = time.time()
             nii = nib.Nifti1Image(nib.load(candidates[0]).dataobj,
                                   nib.load(candidates[0]).affine)
             image.index_img(nii, 0).to_filename(
                 anat_dir / f"{sub}_{ses}_inv-1_MP2RAGE.nii.gz")
             image.index_img(nii, 1).to_filename(
                 anat_dir / f"{sub}_{ses}_inv-2_MP2RAGE.nii.gz")
-            print("Saved inv-1 and inv-2 MP2RAGE")
+            _log(f"  Saved inv-1 and inv-2 MP2RAGE ({time.time()-t:.0f}s)")
 
-        # _3.PAR: UNI T1 map
         candidates = list(source_dir.glob("*acq-MP2_085mm*_3.PAR"))
-        print(f"Found {len(candidates)} T1w (UNI) candidates")
         assert len(candidates) in [0, 1]
         if candidates:
+            _log(f"  Loading T1w UNI: {candidates[0].name}")
+            t = time.time()
             raw = nib.load(candidates[0])
             nii = nib.Nifti1Image(raw.dataobj, raw.affine)
             if nii.ndim == 4:
@@ -89,23 +97,24 @@ def _convert_anat(subject, session, source_dir, target_dir):
             nii = image.math_img("np.where(img == img.max(), 0, img)", img=nii)
             nii = image.math_img("img - img.min()", img=nii)
             nii.to_filename(anat_dir / f"{sub}_{ses}_T1w.nii.gz")
-            print("Saved T1w")
+            _log(f"  Saved T1w ({time.time()-t:.0f}s)")
 
     elif session == 2:
         candidates = list(source_dir.glob("*acq-T2w*.PAR"))
-        print(f"Found {len(candidates)} T2w candidates")
         assert len(candidates) in [0, 1]
         if candidates:
+            _log(f"  Loading T2w: {candidates[0].name}")
+            t = time.time()
             raw = nib.load(candidates[0])
             nii = nib.Nifti1Image(raw.dataobj, raw.affine)
             if nii.ndim == 4:
                 nii = image.math_img("np.where(img == img.max(), 0, img)", img=nii)
             nii.to_filename(anat_dir / f"{sub}_{ses}_T2w.nii.gz")
-            print("Saved T2w")
+            _log(f"  Saved T2w ({time.time()-t:.0f}s)")
 
 
 def _convert_func(subject, session, source_dir, target_dir):
-    print("\n--- Functional ---")
+    _log("--- Functional ---")
     func_dir = target_dir / "func"
     func_dir.mkdir(exist_ok=True)
 
@@ -114,9 +123,14 @@ def _convert_func(subject, session, source_dir, target_dir):
 
     for task in ["valuecapture", "deepmreye"]:
         candidates = sorted(source_dir.glob(f"*task-{task}_run-*_bold_*.PAR"))
-        print(f"Found {len(candidates)} task-{task} bold runs")
+        n_runs = len(candidates)
+        _log(f"  Found {n_runs} task-{task} bold runs")
 
-        for par in tqdm(candidates, desc=f"task-{task}"):
+        for i, par in enumerate(candidates, 1):
+            run = int(re.search(r"run-(\d+)", par.name).group(1))
+            size_mb = par.stat().st_size / 1e6
+            _log(f"  [{i}/{n_runs}] task-{task} run-{run}  ({size_mb:.0f} MB)  loading...")
+            t = time.time()
             try:
                 raw = image.load_img(par)
                 nii = nib.Nifti1Image(raw.dataobj, raw.affine)
@@ -124,10 +138,10 @@ def _convert_func(subject, session, source_dir, target_dir):
                 mag = image.index_img(nii, slice(0, n // 2))
                 phase = image.index_img(nii, slice(n // 2, n))
 
-                run = int(re.search(r"run-(\d+)", par.name).group(1))
                 base = func_dir / f"{sub}_{ses}_task-{task}_run-{run}"
-
+                _log(f"  [{i}/{n_runs}] writing mag...")
                 mag.to_filename(f"{base}_part-mag_bold.nii.gz")
+                _log(f"  [{i}/{n_runs}] writing phase...")
                 phase.to_filename(f"{base}_part-phase_bold.nii.gz")
 
                 with open(f"{base}_part-mag_bold.json", "w") as f:
@@ -135,28 +149,31 @@ def _convert_func(subject, session, source_dir, target_dir):
                 with open(f"{base}_part-phase_bold.json", "w") as f:
                     json.dump(BOLD_JSON, f, indent=2)
 
-            except Exception as e:
-                print(f"  ERROR {par.name}: {e}")
+                _log(f"  [{i}/{n_runs}] done ({time.time()-t:.0f}s)")
 
-    # Sbref — one per scanner block (run-1, run-2, run-3)
+            except Exception as e:
+                _log(f"  ERROR {par.name}: {e}")
+
     sbref_candidates = sorted(source_dir.glob("*_sbref_*.PAR"))
-    print(f"Found {len(sbref_candidates)} sbref candidates")
+    _log(f"  Found {len(sbref_candidates)} sbref candidates")
 
     for par in sbref_candidates:
         run = int(re.search(r"run-(\d+)", par.name).group(1))
+        _log(f"  sbref run-{run}  loading...")
+        t = time.time()
         raw = image.load_img(par)
         nii = nib.Nifti1Image(raw.dataobj, raw.affine)
-        # Take first volume (magnitude)
         if nii.ndim == 4:
             nii = image.index_img(nii, 0)
         base = func_dir / f"{sub}_{ses}_run-{run}_sbref"
         nii.to_filename(f"{base}.nii.gz")
         with open(f"{base}.json", "w") as f:
             json.dump(BOLD_JSON, f, indent=2)
+        _log(f"  sbref run-{run} done ({time.time()-t:.0f}s)")
 
 
 def _convert_fmap(subject, session, source_dir, target_dir):
-    print("\n--- Field maps ---")
+    _log("--- Field maps ---")
     fmap_dir = target_dir / "fmap"
     fmap_dir.mkdir(exist_ok=True)
 
@@ -164,7 +181,7 @@ def _convert_fmap(subject, session, source_dir, target_dir):
     ses = f"ses-{session}"
 
     candidates = sorted(source_dir.glob("*_phasediff_*.PAR"))
-    print(f"Found {len(candidates)} fmap candidates")
+    _log(f"  Found {len(candidates)} fmap candidates")
     n = len(candidates)
 
     # Build IntendedFor: split 8 valuecapture runs across n fmaps, plus deepmreye for first fmap
@@ -204,12 +221,12 @@ def _convert_fmap(subject, session, source_dir, target_dir):
 
 
 def _convert_behavior(subject, session, bids_dir, target_dir):
-    print("\n--- Behavior ---")
+    _log("--- Behavior ---")
     func_dir = target_dir / "func"
     behavior_src = bids_dir / "sourcedata" / "behavior" / f"sub-{subject:02d}" / f"ses-{session}"
 
     if not behavior_src.exists():
-        print(f"No behavior sourcedata at {behavior_src}, skipping.")
+        _log(f"  No behavior sourcedata at {behavior_src}, skipping.")
         return
 
     for run_dir in sorted(behavior_src.iterdir()):
@@ -223,7 +240,7 @@ def _convert_behavior(subject, session, bids_dir, target_dir):
         for events_file in run_dir.glob("*_events.tsv"):
             dest = func_dir / f"sub-{subject:02d}_ses-{session}_task-valuecapture_run-{run}_events.tsv"
             shutil.copy2(events_file, dest)
-            print(f"  {events_file.name} → {dest.name}")
+            _log(f"  {events_file.name} → {dest.name}")
 
 
 if __name__ == "__main__":
