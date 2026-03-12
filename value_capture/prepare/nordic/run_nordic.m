@@ -70,4 +70,16 @@ movefile([fn_out_full, '.gz'], final_output);
 delete(fn_out_full);
 
 disp(['Compressed file created: ', final_output]);
+
+% Copy JSON sidecar so fMRIPrep can find RepetitionTime etc.
+fn_json_in = fullfile(base_path, subject, session_path, 'func', ...
+    sprintf('%s_%stask-%s_run-%d_part-mag_bold.json', subject, session_str, task, run));
+fn_json_out = fullfile(base_path, subject, session_path, 'func', ...
+    sprintf('%s_%stask-%s_run-%d_rec-NORDIC_bold.json', subject, session_str, task, run));
+if exist(fn_json_in, 'file')
+    copyfile(fn_json_in, fn_json_out);
+    disp(['Copied JSON sidecar: ', fn_json_out]);
+else
+    warning('Source JSON sidecar not found: %s', fn_json_in);
+end
 end

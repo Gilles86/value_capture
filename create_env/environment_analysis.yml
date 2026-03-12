@@ -1,4 +1,4 @@
-name: value_capture_analysis
+name: value_capture
 channels:
   - conda-forge
 dependencies:

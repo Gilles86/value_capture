@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Creates both conda environments for the value_capture project:
 #   value_capture_psychopy  — running the experiment
-#   value_capture_analysis  — data analysis / notebooks
+#   value_capture  — data analysis / notebooks
 #
 # Usage (from repo root):
 #   bash create_env/setup.sh
@@ -37,12 +37,12 @@ create_psychopy() {
 }
 
 create_analysis() {
-    echo "=== Creating value_capture_analysis ==="
+    echo "=== Creating value_capture ==="
     conda env create -f "$SCRIPT_DIR/environment_analysis.yml" --yes
 
     echo ""
-    echo "value_capture_analysis ready."
-    echo "  conda activate value_capture_analysis"
+    echo "value_capture ready."
+    echo "  conda activate value_capture"
     echo "  jupyter lab"
 }
 

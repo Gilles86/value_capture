@@ -24,7 +24,7 @@ Key CLI flags: `--settings` (default: `default`), `--use_eyetracker` (session 1 
 
 Two conda environments:
 - `value_capture_psychopy` — runs the task (PsychoPy + exptools2)
-- `value_capture_analysis` — Jupyter notebooks in `notebooks/`
+- `value_capture` — Jupyter notebooks in `notebooks/`
 
 ```bash
 bash create_env/setup.sh          # both
@@ -93,6 +93,24 @@ Each `SingletonTrial` has 6 phases (indices used in `draw()` and `get_events()`)
 | 5 | iti2 | 1.0/1.5/2.0 s |
 
 **PRF bar** (`stimuli.PRFBarStimulus`) is drawn **only during phase 2**. It sits at a fixed position per trial (8 Hz flicker), with positions drawn from a balanced schedule covering all 10 horizontal × 10 vertical positions equally per run.
+
+## MRI Data & Preprocessing
+
+- Raw data: `/data/ds-valuecapture/sourcedata/` (PAR/REC, behavior TSVs)
+- BIDS output: `/data/ds-valuecapture/`
+- Cluster data: `/shares/zne.uzh/gdehol/ds-valuecapture/`
+- fmriprep container: `/shares/zne.uzh/containers/fmriprep-25.2.5`
+
+**Conversion:** `python value_capture/prepare/convert_raw_mri_data.py <sub> <ses>`
+- ses-1: MP2RAGE → T1w + inv-1/inv-2; ses-2: T2w
+- Bold split into `part-mag` / `part-phase`; fmap `IntendedFor` → `rec-NORDIC_bold`
+
+**Cluster pipeline:** `bash value_capture/prepare/submit_pipeline.sh 01 1 01 2`
+- Submits 9 NORDIC jobs per session (8 valuecapture + 1 deepmreye)
+- fmriprep submitted with `afterok` dependency on all NORDIC jobs
+- bids_filter.json selects only `rec-NORDIC` bold files
+
+**Sync back:** `bash value_capture/prepare/sync_fmriprep.sh`
 
 ## Feedback Logic
 

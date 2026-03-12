@@ -111,13 +111,63 @@ value_capture/
 │   │   ├── default.yml  # 7T scanner (Spinoza Centre)
 │   │   └── debug.yml    # laptop testing (windowed, short ITIs)
 │   └── logs/            # output (gitignored)
+├── value_capture/prepare/
+│   ├── convert_raw_mri_data.py   # PAR/REC → BIDS conversion
+│   ├── convert_all.sh            # run conversion sequentially for all subjects
+│   ├── sync_fmriprep.sh          # rsync fmriprep derivatives from cluster
+│   ├── submit_pipeline.sh        # master: NORDIC → fmriprep via SLURM deps
+│   ├── nordic/
+│   │   ├── run_nordic.m          # MATLAB NORDIC denoising function
+│   │   ├── submit_nordic_job.sh  # single SLURM NORDIC job
+│   │   └── submit_all_runs.sh    # submit all 9 runs for one subject/session
+│   └── cluster_preproc/
+│       ├── fmriprep.sh           # fmriprep SLURM job (apptainer)
+│       ├── bids_filter.json      # select rec-NORDIC bold only
+│       └── build_fmriprep.sh     # build fmriprep container
+├── notebooks/           # analysis notebooks
 ├── create_env/
 │   ├── environment_psychopy.yml  # conda env for running the task
 │   ├── environment_analysis.yml  # conda env for data analysis
 │   └── setup.sh                  # creates both environments
-├── notebooks/           # analysis notebooks
 └── value_levels_2.osexp # original online OpenSesame experiment
 ```
+
+## MRI Data Preprocessing
+
+Raw data lives in `/data/ds-valuecapture/sourcedata/`. The preprocessing pipeline is:
+
+### 1. BIDS conversion (local)
+
+```bash
+conda activate value_capture
+# All subjects/sessions sequentially:
+bash value_capture/prepare/convert_all.sh
+
+# Or a single subject/session:
+python value_capture/prepare/convert_raw_mri_data.py <subject> <session>
+```
+
+Converts PAR/REC → NIfTI, splits bold into `part-mag` / `part-phase`, writes fmap and events sidecar files.
+
+### 2. NORDIC + fmriprep (cluster)
+
+Copy the BIDS data to the cluster, then:
+
+```bash
+cd ~/git/value_capture/value_capture/prepare
+
+# Submit NORDIC for all runs, then fmriprep automatically after:
+bash submit_pipeline.sh 01 1 01 2   # sub-01, both sessions
+bash submit_pipeline.sh 02 1 02 2   # sub-02, both sessions
+```
+
+### 3. Sync results back
+
+```bash
+bash value_capture/prepare/sync_fmriprep.sh
+```
+
+Syncs figures/HTML first (for quick QC), then NIfTI files. Excludes fsnative/fsaverage/MNI functional outputs.
 
 ## Installation
 
