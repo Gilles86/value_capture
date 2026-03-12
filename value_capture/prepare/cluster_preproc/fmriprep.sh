@@ -30,4 +30,5 @@ apptainer run \
   --omp-nthreads 16 \
   --low-mem \
   --no-submm-recon \
+  --overwrite-fsaverage \
   --bids-filter-file $BIDS_FILTER_FILE
