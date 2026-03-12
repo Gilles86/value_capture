@@ -19,7 +19,7 @@ apptainer run \
   -B /shares/zne.uzh/gdehol/ds-valuecapture:/data \
   -B /scratch/gdehol:/workflow \
   -B ${PWD}:/bids_input \
-  --cleanenv /shares/zne.uzh/containers/fmriprep-25.2.3 \
+  --cleanenv /shares/zne.uzh/containers/fmriprep-25.2.5 \
     /data /data/derivatives/fmriprep participant \
   --participant_label $PARTICIPANT_LABEL \
   --output-spaces T1w fsnative \
