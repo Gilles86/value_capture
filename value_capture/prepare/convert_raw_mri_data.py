@@ -192,12 +192,12 @@ def _convert_fmap(subject, session, source_dir, target_dir):
         start = 1 + ix * runs_per_fmap
         end = start + runs_per_fmap + (remainder if ix == n - 1 else 0)
         intended = [
-            f"ses-{session}/func/{sub}_{ses}_task-valuecapture_run-{r}_part-mag_bold.nii.gz"
+            f"ses-{session}/func/{sub}_{ses}_task-valuecapture_run-{r}_rec-NORDIC_bold.nii.gz"
             for r in range(start, end)
         ]
         if ix == 0:
             intended.append(
-                f"ses-{session}/func/{sub}_{ses}_task-deepmreye_run-1_part-mag_bold.nii.gz"
+                f"ses-{session}/func/{sub}_{ses}_task-deepmreye_run-1_rec-NORDIC_bold.nii.gz"
             )
         return intended
 
