@@ -29,6 +29,9 @@ fi
 
 REPO=/home/$USER/git/value_capture
 
+# ── ensure submodules are initialised (libs/braincoder etc.) ─────────────────
+git -C "$REPO" submodule update --init --recursive
+
 # ── create or update environment ──────────────────────────────────────────────
 if $CONDA_CMD env list | grep -q "^value_capture "; then
     echo "Environment value_capture exists — updating..."
