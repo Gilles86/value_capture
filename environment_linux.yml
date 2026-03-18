@@ -23,4 +23,5 @@ dependencies:
     - tqdm
     - pybids
     - git+https://github.com/cvnlab/GLMsingle.git
+    # braincoder installed separately from libs/braincoder/ by setup_env.sh
     - -e .
