@@ -88,16 +88,23 @@ class Subject:
         else:
             raise ValueError(f'Session must be 1 or 2, got {session}')
 
-    def get_preprocessed_bold(self, session, runs, fmriprep_deriv='fmriprep'):
+    def get_preprocessed_bold(self, session, runs, fmriprep_deriv='fmriprep',
+                              space='T1w', res=None):
         """Return list of fmriprep preproc bold paths for the given runs.
 
-        Expected filename pattern (T1w space, NORDIC reconstruction):
-          sub-<sub>_ses-<ses>_task-valuecapture_rec-NORDIC_run-<run>_space-T1w_desc-preproc_bold.nii.gz
+        Parameters
+        ----------
+        space : str
+            BIDS space entity, e.g. 'T1w' or 'MNI152NLin2009cAsymm'.
+        res : str or None
+            BIDS res entity, e.g. '2' for 2 mm MNI output. Omitted when None.
         """
         paths = []
         for run in runs:
+            res_part = f'_res-{res}' if res else ''
             fname = (f'sub-{self.subject_id}_ses-{session}_task-valuecapture'
-                     f'_rec-NORDIC_run-{run}_space-T1w_desc-preproc_bold.nii.gz')
+                     f'_rec-NORDIC_run-{run}_space-{space}{res_part}'
+                     f'_desc-preproc_bold.nii.gz')
             path = op.join(self.bids_folder, 'derivatives', fmriprep_deriv,
                            f'sub-{self.subject_id}', f'ses-{session}', 'func', fname)
             paths.append(path)
@@ -118,6 +125,111 @@ class Subject:
         if len(pulses) > 0:
             df['onset'] = df['onset'] - pulses['onset'].min()
         return df
+
+    def get_confounds(self, session, run, fmriprep_deriv='fmriprep',
+                      columns=(
+                          # 7 anatomical CompCor components
+                          'a_comp_cor_00', 'a_comp_cor_01', 'a_comp_cor_02',
+                          'a_comp_cor_03', 'a_comp_cor_04', 'a_comp_cor_05',
+                          'a_comp_cor_06',
+                          # 6 rigid-body motion parameters
+                          'trans_x', 'trans_y', 'trans_z',
+                          'rot_x', 'rot_y', 'rot_z',
+                          # framewise displacement and DVARS
+                          'framewise_displacement', 'dvars',
+                      )):
+        """Return confound timeseries for one run as a DataFrame (timepoints × regressors)."""
+        fn = op.join(self.bids_folder, 'derivatives', fmriprep_deriv,
+                     f'sub-{self.subject_id}', f'ses-{session}', 'func',
+                     f'sub-{self.subject_id}_ses-{session}_task-valuecapture'
+                     f'_rec-NORDIC_run-{run}_desc-confounds_timeseries.tsv')
+        if not op.exists(fn):
+            raise FileNotFoundError(f'No confounds file: {fn}')
+        df = pd.read_csv(fn, sep='\t')
+        available = [c for c in columns if c in df.columns]
+        return df[available]
+
+    def get_brain_mask(self, session, run=1, fmriprep_deriv='fmriprep',
+                       space='T1w', res=None):
+        """Return brain mask NIfTI image from a given run.
+
+        Parameters
+        ----------
+        space : str
+            BIDS space entity, e.g. 'T1w' or 'MNI152NLin2009cAsymm'.
+        res : str or None
+            BIDS res entity, e.g. '2' for 2 mm MNI output. Omitted when None.
+        """
+        from nilearn import image
+        res_part = f'_res-{res}' if res else ''
+        fn = op.join(self.bids_folder, 'derivatives', fmriprep_deriv,
+                     f'sub-{self.subject_id}', f'ses-{session}', 'func',
+                     f'sub-{self.subject_id}_ses-{session}_task-valuecapture'
+                     f'_rec-NORDIC_run-{run}_space-{space}{res_part}'
+                     f'_desc-brain_mask.nii.gz')
+        if not op.exists(fn):
+            raise FileNotFoundError(f'No brain mask: {fn}')
+        return image.load_img(fn)
+
+    def get_trial_metadata(self, sessions):
+        """Return GLMsingle trial metadata TSV as a DataFrame.
+
+        One row per trial, same order as volumes in get_single_trial_estimates().
+        Columns: condition, bar_position, bar_orientation, value_rank,
+                 distractor_present, trial_nr, onset, session, run.
+        """
+        if isinstance(sessions, int):
+            sessions = [sessions]
+        ses_label = f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
+        fn = op.join(self.bids_folder, 'derivatives', 'glmsingle',
+                     f'sub-{self.subject_id}', ses_label, 'func',
+                     f'sub-{self.subject_id}_{ses_label}_task-valuecapture'
+                     f'_space-T1w_desc-target_trials.tsv')
+        if not op.exists(fn):
+            raise FileNotFoundError(f'No trial metadata TSV: {fn}')
+        return pd.read_csv(fn, sep='\t')
+
+    def get_single_trial_estimates(self, sessions, desc='target', zscore_sessions=False):
+        """Return single-trial beta image from GLMsingle.
+
+        Parameters
+        ----------
+        sessions : int or list of int
+            Session number(s) fitted jointly. Single int for a single-session fit.
+        desc : {'target', 'R2'}
+        zscore_sessions : bool
+            Z-score betas within each session independently before returning.
+            Requires multiple sessions.
+        """
+        import numpy as np
+        from nilearn import image
+
+        if isinstance(sessions, int):
+            sessions = [sessions]
+        ses_label = f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
+
+        fn = op.join(self.bids_folder, 'derivatives', 'glmsingle',
+                     f'sub-{self.subject_id}', ses_label, 'func',
+                     f'sub-{self.subject_id}_{ses_label}_task-valuecapture'
+                     f'_space-T1w_desc-{desc}_pe.nii.gz')
+        if not op.exists(fn):
+            raise FileNotFoundError(f'No GLMsingle output ({desc}): {fn}')
+
+        im = image.load_img(fn)
+
+        if zscore_sessions:
+            if len(sessions) < 2:
+                raise ValueError('zscore_sessions requires multiple sessions')
+            trials = self.get_trial_metadata(sessions)
+            session_sizes = [len(trials[trials['session'] == s]) for s in sessions]
+            boundaries = np.cumsum([0] + session_sizes)
+            zscored = []
+            for start, stop in zip(boundaries[:-1], boundaries[1:]):
+                block = image.index_img(im, slice(start, stop))
+                zscored.append(image.clean_img(block, detrend=False, standardize='zscore'))
+            im = image.concat_imgs(zscored)
+
+        return im
 
     def get_behavioral_data(self, session=None, run=None, exclude_outlier_rts=True):
         """Return per-trial behavioral data as a DataFrame.

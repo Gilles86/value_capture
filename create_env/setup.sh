@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Creates both conda environments for the value_capture project:
-#   value_capture_psychopy  — running the experiment
-#   value_capture  — data analysis / notebooks
+# Creates conda environments for the value_capture project.
 #
 # Usage (from repo root):
-#   bash create_env/setup.sh
+#   bash create_env/setup.sh [target]
 #
-# To create only one environment:
-#   bash create_env/setup.sh psychopy
-#   bash create_env/setup.sh analysis
+# Targets:
+#   psychopy       — experiment runtime (PsychoPy + exptools2)
+#   apple_silicon  — analysis env for macOS arm64 (default for 'both')
+#   linux          — analysis env for Linux / cluster
+#   both           — psychopy + apple_silicon (default)
 
 set -e
 
@@ -36,9 +36,19 @@ create_psychopy() {
     echo "  python experiment/main.py <subject> <session> <run>"
 }
 
-create_analysis() {
-    echo "=== Creating value_capture ==="
-    conda env create -f "$SCRIPT_DIR/environment_analysis.yml" --yes
+create_apple_silicon() {
+    echo "=== Creating value_capture (Apple Silicon / macOS arm64) ==="
+    conda env create -f "$SCRIPT_DIR/environment_apple_silicon.yml" --yes
+
+    echo ""
+    echo "value_capture ready."
+    echo "  conda activate value_capture"
+    echo "  jupyter lab"
+}
+
+create_linux() {
+    echo "=== Creating value_capture (Linux / cluster) ==="
+    conda env create -f "$SCRIPT_DIR/environment_linux.yml" --yes
 
     echo ""
     echo "value_capture ready."
@@ -49,15 +59,16 @@ create_analysis() {
 TARGET="${1:-both}"
 
 case "$TARGET" in
-    psychopy) create_psychopy ;;
-    analysis) create_analysis ;;
+    psychopy)      create_psychopy ;;
+    apple_silicon) create_apple_silicon ;;
+    linux)         create_linux ;;
     both)
         create_psychopy
         echo ""
-        create_analysis
+        create_apple_silicon
         ;;
     *)
-        echo "Unknown target '$TARGET'. Use: psychopy | analysis | both"
+        echo "Unknown target '$TARGET'. Use: psychopy | apple_silicon | linux | hssm | both"
         exit 1
         ;;
 esac

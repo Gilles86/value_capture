@@ -1,0 +1,37 @@
+name: value_capture
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  # Scientific stack
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - tqdm
+  - joblib
+  # Notebooks
+  - jupyterlab
+  - ipykernel
+  - ipywidgets
+  - pingouin
+  # Neuroimaging
+  - nibabel
+  - nilearn
+  # Bayesian modeling (PyMC5 + Bambi + HSSM work natively on Apple Silicon via conda-forge)
+  - pymc
+  - bambi
+  - arviz
+  - pip:
+    - jax             # keras backend for braincoder; also required by hssm's numpyro sampler
+    - absl-py         # transitive hssm dep (jaxonnxruntime)
+    - hssm            # Hierarchical Sequential Sampling Models (DDM etc.)
+    - pybids          # BIDS dataset access
+    - pyarrow         # fast parquet/csv I/O
+    - pyyaml          # reading experiment settings/logs
+    - git+https://github.com/cvnlab/GLMsingle.git
+    - -e ../libs/braincoder  # PRF encoding/decoding (keras-backend branch)
+    - -e ../           # install value_capture package itself (editable)
