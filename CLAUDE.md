@@ -98,7 +98,7 @@ Each `SingletonTrial` has 6 phases (indices used in `draw()` and `get_events()`)
 
 - Raw data: `/data/ds-valuecapture/sourcedata/` (PAR/REC, behavior TSVs)
 - BIDS output: `/data/ds-valuecapture/`
-- Cluster data: `/shares/zne.uzh/gdehol/ds-valuecapture/`
+- Cluster: `ssh sciencecluster` → data at `/shares/zne.uzh/gdehol/ds-valuecapture/`
 - fmriprep container: `/shares/zne.uzh/containers/fmriprep-25.2.5`
 
 **Conversion:** `python value_capture/prepare/convert_raw_mri_data.py <sub> <ses>`

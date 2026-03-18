@@ -42,12 +42,8 @@ FMAP_JSON = {
 }
 
 
-def main(subject, session, bids_dir):
+def main(subject, session, bids_dir, behavior_only=False):
     bids_dir = Path(bids_dir)
-    source_dir = bids_dir / "sourcedata" / "mri" / f"sub-{subject:02d}_ses-{session}"
-
-    if not source_dir.exists():
-        raise FileNotFoundError(f"Source directory not found: {source_dir}")
 
     target_dir = bids_dir / f"sub-{subject:02d}" / f"ses-{session}"
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -55,9 +51,14 @@ def main(subject, session, bids_dir):
     t0 = time.time()
     _log(f"Starting sub-{subject:02d} ses-{session}")
 
-    _convert_anat(subject, session, source_dir, target_dir)
-    _convert_func(subject, session, source_dir, target_dir)
-    _convert_fmap(subject, session, source_dir, target_dir)
+    if not behavior_only:
+        source_dir = bids_dir / "sourcedata" / "mri" / f"sub-{subject:02d}_ses-{session}"
+        if not source_dir.exists():
+            raise FileNotFoundError(f"Source directory not found: {source_dir}")
+        _convert_anat(subject, session, source_dir, target_dir)
+        _convert_func(subject, session, source_dir, target_dir)
+        _convert_fmap(subject, session, source_dir, target_dir)
+
     _convert_behavior(subject, session, bids_dir, target_dir)
 
     _log(f"Done: sub-{subject:02d} ses-{session}  (total {time.time()-t0:.0f}s)")
@@ -223,6 +224,7 @@ def _convert_fmap(subject, session, source_dir, target_dir):
 def _convert_behavior(subject, session, bids_dir, target_dir):
     _log("--- Behavior ---")
     func_dir = target_dir / "func"
+    func_dir.mkdir(exist_ok=True)
     behavior_src = bids_dir / "sourcedata" / "behavior" / f"sub-{subject:02d}" / f"ses-{session}"
 
     if not behavior_src.exists():
@@ -249,5 +251,7 @@ if __name__ == "__main__":
     parser.add_argument("session", type=int, help="Session number (1 or 2)")
     parser.add_argument("--bids_dir", default="/data/ds-valuecapture",
                         help="Path to BIDS directory")
+    parser.add_argument("--behavior_only", action="store_true",
+                        help="Only convert behavior (skip MRI/fmap conversion)")
     args = parser.parse_args()
-    main(args.subject, args.session, args.bids_dir)
+    main(args.subject, args.session, args.bids_dir, behavior_only=args.behavior_only)
