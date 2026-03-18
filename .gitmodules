@@ -1,3 +1,7 @@
 [submodule "experiment/deepmreye_calibration"]
 	path = experiment/deepmreye_calibration
 	url = https://github.com/Gilles86/deepmreye_calibration_exptools
+[submodule "libs/braincoder"]
+	path = libs/braincoder
+	url = git@github.com:Gilles86/braincoder.git
+	branch = keras-backend
