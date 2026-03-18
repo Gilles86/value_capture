@@ -5,6 +5,8 @@ import yaml
 import pandas as pd
 
 
+BIDS_FOLDER = '/data/ds-valuecapture'
+
 # Maps numeric location codes to quadrant names
 LOCATION_MAPPING = {
     1.0: 'upper_right',
@@ -86,8 +88,31 @@ class Subject:
         else:
             raise ValueError(f'Session must be 1 or 2, got {session}')
 
+    def get_preprocessed_bold(self, session, runs, fmriprep_deriv='fmriprep'):
+        """Return list of fmriprep preproc bold paths for the given runs.
+
+        Expected filename pattern (T1w space, NORDIC reconstruction):
+          sub-<sub>_ses-<ses>_task-valuecapture_rec-NORDIC_run-<run>_space-T1w_desc-preproc_bold.nii.gz
+        """
+        paths = []
+        for run in runs:
+            fname = (f'sub-{self.subject_id}_ses-{session}_task-valuecapture'
+                     f'_rec-NORDIC_run-{run}_space-T1w_desc-preproc_bold.nii.gz')
+            path = op.join(self.bids_folder, 'derivatives', fmriprep_deriv,
+                           f'sub-{self.subject_id}', f'ses-{session}', 'func', fname)
+            paths.append(path)
+        return paths
+
     def get_onsets(self, session, run):
-        """Load raw events TSV with onset times relative to first scanner pulse."""
+        """Load raw events TSV with onset times relative to the first scanner pulse.
+
+        t=0 is the very first 'pulse' event in the file (the first TR sent by the
+        scanner, including any stabilisation TRs at the start of the run).  This
+        aligns with the fmriprep output: fmriprep discards a fixed number of
+        leading volumes but keeps all the rest, so onset 0 corresponds to
+        acquisition TR 0 and fmriprep output TR 0 corresponds to the first
+        non-discarded acquisition TR.
+        """
         df = pd.read_csv(self._events_path(session, run), sep='\t')
         pulses = df[df['event_type'] == 'pulse']
         if len(pulses) > 0:

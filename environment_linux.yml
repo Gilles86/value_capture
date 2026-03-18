@@ -1,0 +1,26 @@
+name: value_capture
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  # Scientific stack
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - seaborn
+  - jupyterlab
+  - ipykernel
+  - ipywidgets
+  # Neuroimaging
+  - nibabel
+  - nilearn
+  - pip:
+    - pingouin
+    - pyyaml
+    - pyarrow
+    - tqdm
+    - pybids
+    - git+https://github.com/cvnlab/GLMsingle.git
+    - -e .
