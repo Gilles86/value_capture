@@ -22,7 +22,7 @@ apptainer run \
   --cleanenv /shares/zne.uzh/containers/fmriprep-25.2.5 \
     /data /data/derivatives/fmriprep participant \
   --participant_label $PARTICIPANT_LABEL \
-  --output-spaces T1w fsnative \
+  --output-spaces T1w MNI152NLin2009cAsymm:res-2 fsnative \
   --dummy-scans 4 \
   --skip_bids_validation \
   -w /workflow \
