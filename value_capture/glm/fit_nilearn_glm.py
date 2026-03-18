@@ -14,18 +14,27 @@ with the SPM canonical HRF:
     dist_rank2    — high-value distractor
 
   Feedback phase (1.0 s):
-    feedback_shown    — points text visible
-    feedback_omitted  — blank fixation (trial selected for no feedback)
+    feedback_shown    — feedback trials, unmodulated (mean response to feedback)
+    feedback_points   — feedback trials, amplitude = mean-centred log(1 + earned_points)
+                        (areas where BOLD scales with log reward magnitude)
+    feedback_omitted  — blank fixation on no-feedback trials
 
-Motion parameters and DCT cosines from fmriprep confounds are included as
-nuisance regressors.  The fmriprep cosines handle low-frequency drift so
-nilearn's own drift model is disabled.
+Motion parameters and anatomical CompCor + DCT cosines from fmriprep confounds
+are included as nuisance regressors.  The fmriprep cosines handle low-frequency
+drift so nilearn's own drift model is disabled.
 
 Contrasts
 ---------
-  value_linear   : dist_rank2 - dist_rank0          (high > low value distractor)
-  value_any      : mean(dist_rank0..2) - dist_absent (any distractor > absent)
-  feedback       : feedback_shown - feedback_omitted
+  value_linear    : dist_rank2 - dist_rank0
+                    (BOLD scales linearly with distractor value)
+  value_capture   : dist_rank2 - dist_absent
+                    (high-value distractor vs no distractor; signature effect)
+  distractor_any  : (dist_rank0 + dist_rank1 + dist_rank2) / 3 - dist_absent
+                    (attentional capture regardless of value)
+  feedback        : feedback_shown - feedback_omitted
+                    (any feedback vs no feedback)
+  feedback_value  : feedback_points
+                    (BOLD scales with log magnitude of reward received)
 
 Timing
 ------
@@ -35,21 +44,27 @@ n_removed * TR so they are relative to the first fmriprep volume.
 
 Output
 ------
-Per-subject z-score and effect-size maps in T1w space:
+Per-subject z-score and effect-size maps:
 
   <bids>/derivatives/nilearn_glm/sub-<sub>/func/
-    sub-<sub>_task-valuecapture_space-T1w_contrast-<name>_stat-z_statmap.nii.gz
-    sub-<sub>_task-valuecapture_space-T1w_contrast-<name>_stat-effect_statmap.nii.gz
+    sub-<sub>_task-valuecapture_space-<space>_contrast-<name>_stat-z_statmap.nii.gz
+    sub-<sub>_task-valuecapture_space-<space>_contrast-<name>_stat-effect_statmap.nii.gz
+
+  <bids>/derivatives/nilearn_glm/sub-<sub>/figures/
+    sub-<sub>_task-valuecapture_space-<space>_design_matrix.png
 
 Usage:
     python fit_nilearn_glm.py 01
     python fit_nilearn_glm.py 01 --sessions 2
+    python fit_nilearn_glm.py 01 --space MNI152NLin2009cAsymm --res 2
+    python fit_nilearn_glm.py 01 --smoothing-fwhm 6
     python fit_nilearn_glm.py 01 --bids-folder /shares/zne.uzh/gdehol/ds-valuecapture
 """
 
 import argparse
 import warnings
 from pathlib import Path
+import numpy as np
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -64,9 +79,11 @@ warnings.filterwarnings('ignore')
 TR = 1.6
 
 CONTRASTS = {
-    'value_linear': 'dist_rank2 - dist_rank0',
-    'value_any': '(dist_rank0 + dist_rank1 + dist_rank2) / 3 - dist_absent',
-    'feedback': 'feedback_shown - feedback_omitted',
+    'value_linear':   'dist_rank2 - dist_rank0',
+    'value_capture':  'dist_rank2 - dist_absent',
+    'distractor_any': '(dist_rank0 + dist_rank1 + dist_rank2) / 3 - dist_absent',
+    'feedback':       'feedback_shown - feedback_omitted',
+    'feedback_value': 'feedback_points',
 }
 
 
@@ -80,51 +97,68 @@ def build_events(onsets_df, n_removed):
 
     Returns
     -------
-    DataFrame with columns onset, duration, trial_type
+    DataFrame with columns onset, duration, trial_type (and modulation where used)
     """
     dummy_offset = n_removed * TR
     rows = []
 
-    # Target phase: split by distractor value condition
+    # --- Target phase: split by distractor value condition ---
     targets = onsets_df[onsets_df['event_type'] == 'target']
     for _, row in targets.iterrows():
-        if not row['distractor_present']:
-            label = 'dist_absent'
-        else:
-            label = f'dist_rank{int(row["value_rank"])}'
+        label = ('dist_absent' if not row['distractor_present']
+                 else f'dist_rank{int(row["value_rank"])}')
         rows.append({
             'onset': row['onset'] - dummy_offset,
             'duration': 1.75,
             'trial_type': label,
         })
 
-    # Feedback phase: split by whether feedback was shown
+    # --- Feedback phase ---
     feedbacks = onsets_df[onsets_df['event_type'] == 'feedback']
+    shown = feedbacks[feedbacks['show_feedback'] == True]
+
+    # Log-transform points (log1p handles zeros) then mean-centre within run
+    log_points = np.log1p(shown['earned_points'].fillna(0).values)
+    mean_log_points = log_points.mean() if len(log_points) > 0 else 0.0
+    shown_idx = shown.index.tolist()
+
     for _, row in feedbacks.iterrows():
-        label = 'feedback_shown' if row['show_feedback'] else 'feedback_omitted'
-        rows.append({
-            'onset': row['onset'] - dummy_offset,
-            'duration': 1.0,
-            'trial_type': label,
-        })
+        onset = row['onset'] - dummy_offset
+        if not row['show_feedback']:
+            rows.append({'onset': onset, 'duration': 1.0,
+                         'trial_type': 'feedback_omitted'})
+        else:
+            # Unmodulated: captures average BOLD response to feedback
+            rows.append({'onset': onset, 'duration': 1.0,
+                         'trial_type': 'feedback_shown'})
+            # Parametric: captures how BOLD scales with log reward magnitude
+            log_val = np.log1p(float(row['earned_points'] or 0))
+            rows.append({'onset': onset, 'duration': 1.0,
+                         'trial_type': 'feedback_points',
+                         'modulation': log_val - mean_log_points})
 
     return pd.DataFrame(rows).sort_values('onset').reset_index(drop=True)
 
 
-def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmriprep'):
+def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmriprep',
+         space='T1w', res=None, smoothing_fwhm=None):
     sub = Subject(subject, bids_folder=bids_folder)
 
     if sessions is None:
         sessions = sub.get_sessions()
 
-    print(f'sub-{subject}  sessions={sessions}  [{fmriprep_deriv}]')
+    res_label = f'_res-{res}' if res else ''
+    space_tag = f'space-{space}{res_label}'
+    smooth_tag = f'  smoothing={smoothing_fwhm} mm' if smoothing_fwhm else ''
+    print(f'sub-{subject}  sessions={sessions}  {space_tag}{smooth_tag}  [{fmriprep_deriv}]')
 
     imgs, events_list, confounds_list = [], [], []
 
     for session in sessions:
         runs = sub.get_runs(session)
         bold_paths = sub.get_preprocessed_bold(session, runs,
-                                               fmriprep_deriv=fmriprep_deriv)
+                                               fmriprep_deriv=fmriprep_deriv,
+                                               space=space, res=res)
 
         for run, bold_path in zip(runs, bold_paths):
             raw_events = sub.get_onsets(session, run)
@@ -144,13 +178,15 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
             print(f'  ses-{session} run-{run}: {n_vols} vols '
                   f'({n_removed} removed), conditions: {conditions}')
 
-    mask = sub.get_brain_mask(sessions[0], fmriprep_deriv=fmriprep_deriv)
+    mask = sub.get_brain_mask(sessions[0], fmriprep_deriv=fmriprep_deriv,
+                              space=space, res=res)
 
     model = FirstLevelModel(
         t_r=TR,
         hrf_model='spm',
         drift_model=None,   # fmriprep DCT cosines in confounds handle drift
         noise_model='ar1',
+        smoothing_fwhm=smoothing_fwhm,
         standardize=False,
         mask_img=mask,
     )
@@ -164,7 +200,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
     out_dir.mkdir(parents=True, exist_ok=True)
     fig_dir.mkdir(parents=True, exist_ok=True)
 
-    fn_base = f'sub-{subject}_task-valuecapture_space-T1w'
+    fn_base = f'sub-{subject}_task-valuecapture_{space_tag}'
 
     # Plot design matrix for every run (one subplot per run)
     n_runs = len(model.design_matrices_)
@@ -172,11 +208,8 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
                              constrained_layout=True)
     if n_runs == 1:
         axes = [axes]
-    run_labels = [
-        f'ses-{ses} run-{run}'
-        for ses in sessions
-        for run in sub.get_runs(ses)
-    ]
+    run_labels = [f'ses-{ses} run-{run}'
+                  for ses in sessions for run in sub.get_runs(ses)]
     for ax, dm, label in zip(axes, model.design_matrices_, run_labels):
         plot_design_matrix(dm, ax=ax)
         ax.set_title(label, fontsize=9)
@@ -209,6 +242,15 @@ if __name__ == '__main__':
     parser.add_argument('subject', help="Subject label without 'sub-', e.g. 01")
     parser.add_argument('--sessions', type=int, nargs='+', default=None,
                         help='Session number(s) to fit. Default: all available.')
+    parser.add_argument('--space', default='T1w',
+                        help="BIDS space entity (default: T1w). "
+                             "Use 'MNI152NLin2009cAsymm' for MNI output.")
+    parser.add_argument('--res', default=None,
+                        help="BIDS res entity, e.g. '2' for 2 mm MNI. "
+                             "Omit for T1w native resolution.")
+    parser.add_argument('--smoothing-fwhm', type=float, default=None,
+                        help='Spatial smoothing kernel FWHM in mm applied before '
+                             'fitting (e.g. 6). Default: no smoothing.')
     parser.add_argument('--bids-folder', default=str(BIDS_FOLDER))
     parser.add_argument('--fmriprep-deriv', default='fmriprep',
                         help='Name of the fmriprep derivatives folder.')
@@ -217,4 +259,7 @@ if __name__ == '__main__':
     main(args.subject,
          sessions=args.sessions,
          bids_folder=args.bids_folder,
-         fmriprep_deriv=args.fmriprep_deriv)
+         fmriprep_deriv=args.fmriprep_deriv,
+         space=args.space,
+         res=args.res,
+         smoothing_fwhm=args.smoothing_fwhm)

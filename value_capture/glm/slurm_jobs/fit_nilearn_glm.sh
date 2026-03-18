@@ -25,6 +25,9 @@ fi
 
 SESSION="${SESSION:-}"
 FMRIPREP_DERIV="${FMRIPREP_DERIV:-fmriprep}"
+SPACE="${SPACE:-T1w}"
+RES="${RES:-}"
+SMOOTHING_FWHM="${SMOOTHING_FWHM:-}"
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
 REPO=$HOME/git/value_capture
@@ -33,11 +36,14 @@ ARGS=(
     "$PARTICIPANT_LABEL"
     --bids-folder "$BIDS_FOLDER"
     --fmriprep-deriv "$FMRIPREP_DERIV"
+    --space "$SPACE"
 )
 
-[ -n "$SESSION" ] && ARGS+=(--sessions $SESSION)
+[ -n "$SESSION" ]        && ARGS+=(--sessions $SESSION)
+[ -n "$RES" ]            && ARGS+=(--res "$RES")
+[ -n "$SMOOTHING_FWHM" ] && ARGS+=(--smoothing-fwhm "$SMOOTHING_FWHM")
 
-echo "fit_nilearn_glm: sub-${PARTICIPANT_LABEL}  deriv=${FMRIPREP_DERIV}"
+echo "fit_nilearn_glm: sub-${PARTICIPANT_LABEL}  deriv=${FMRIPREP_DERIV}  space=${SPACE}  res=${RES}  smoothing=${SMOOTHING_FWHM}"
 echo "Args: ${ARGS[*]}"
 
 # Load conda environment
