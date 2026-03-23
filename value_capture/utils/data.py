@@ -171,7 +171,7 @@ class Subject:
             raise FileNotFoundError(f'No brain mask: {fn}')
         return image.load_img(fn)
 
-    def get_trial_metadata(self, sessions):
+    def get_trial_metadata(self, sessions, glmsingle_deriv='glmsingle'):
         """Return GLMsingle trial metadata TSV as a DataFrame.
 
         One row per trial, same order as volumes in get_single_trial_estimates().
@@ -181,7 +181,7 @@ class Subject:
         if isinstance(sessions, int):
             sessions = [sessions]
         ses_label = f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
-        fn = op.join(self.bids_folder, 'derivatives', 'glmsingle',
+        fn = op.join(self.bids_folder, 'derivatives', glmsingle_deriv,
                      f'sub-{self.subject_id}', ses_label, 'func',
                      f'sub-{self.subject_id}_{ses_label}_task-valuecapture'
                      f'_space-T1w_desc-target_trials.tsv')
@@ -189,7 +189,8 @@ class Subject:
             raise FileNotFoundError(f'No trial metadata TSV: {fn}')
         return pd.read_csv(fn, sep='\t')
 
-    def get_single_trial_estimates(self, sessions, desc='target', zscore_sessions=False):
+    def get_single_trial_estimates(self, sessions, desc='target', zscore_sessions=False,
+                                   glmsingle_deriv='glmsingle'):
         """Return single-trial beta image from GLMsingle.
 
         Parameters
@@ -200,6 +201,9 @@ class Subject:
         zscore_sessions : bool
             Z-score betas within each session independently before returning.
             Requires multiple sessions.
+        glmsingle_deriv : str
+            Name of the GLMsingle derivatives folder (default: 'glmsingle').
+            Use e.g. 'glmsingle_s6mm' for spatially smoothed betas.
         """
         import numpy as np
         from nilearn import image
@@ -208,7 +212,7 @@ class Subject:
             sessions = [sessions]
         ses_label = f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
 
-        fn = op.join(self.bids_folder, 'derivatives', 'glmsingle',
+        fn = op.join(self.bids_folder, 'derivatives', glmsingle_deriv,
                      f'sub-{self.subject_id}', ses_label, 'func',
                      f'sub-{self.subject_id}_{ses_label}_task-valuecapture'
                      f'_space-T1w_desc-{desc}_pe.nii.gz')
@@ -220,7 +224,7 @@ class Subject:
         if zscore_sessions:
             if len(sessions) < 2:
                 raise ValueError('zscore_sessions requires multiple sessions')
-            trials = self.get_trial_metadata(sessions)
+            trials = self.get_trial_metadata(sessions, glmsingle_deriv=glmsingle_deriv)
             session_sizes = [len(trials[trials['session'] == s]) for s in sessions]
             boundaries = np.cumsum([0] + session_sizes)
             zscored = []

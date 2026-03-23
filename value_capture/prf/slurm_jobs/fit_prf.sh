@@ -23,6 +23,7 @@ fi
 SESSION="${SESSION:-}"
 GM_THRESHOLD="${GM_THRESHOLD:-}"
 GD_ITERATIONS="${GD_ITERATIONS:-1000}"
+GLMSINGLE_DERIV="${GLMSINGLE_DERIV:-glmsingle}"
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
 REPO=$HOME/git/value_capture
@@ -31,12 +32,13 @@ ARGS=(
     "$PARTICIPANT_LABEL"
     --bids-folder "$BIDS_FOLDER"
     --gd-iterations "$GD_ITERATIONS"
+    --glmsingle-deriv "$GLMSINGLE_DERIV"
 )
 
 [ -n "$SESSION" ]       && ARGS+=(--sessions $SESSION)
 [ -n "$GM_THRESHOLD" ]  && ARGS+=(--gm-threshold "$GM_THRESHOLD")
 
-echo "fit_prf: sub-${PARTICIPANT_LABEL}  gm_threshold=${GM_THRESHOLD:-none}  gd_iter=${GD_ITERATIONS}"
+echo "fit_prf: sub-${PARTICIPANT_LABEL}  glmsingle_deriv=${GLMSINGLE_DERIV}  gm_threshold=${GM_THRESHOLD:-none}  gd_iter=${GD_ITERATIONS}"
 echo "Args: ${ARGS[*]}"
 
 . $HOME/init_conda.sh

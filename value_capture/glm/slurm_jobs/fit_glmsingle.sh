@@ -26,6 +26,7 @@ fi
 
 SESSION="${SESSION:-}"
 FMRIPREP_DERIV="${FMRIPREP_DERIV:-fmriprep}"
+FWHM="${FWHM:-0}"
 DEBUG="${DEBUG:-0}"
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
@@ -35,12 +36,13 @@ ARGS=(
     "$PARTICIPANT_LABEL"
     --bids-folder "$BIDS_FOLDER"
     --fmriprep-deriv "$FMRIPREP_DERIV"
+    --fwhm "$FWHM"
 )
 
 [ -n "$SESSION" ] && ARGS+=(--sessions $SESSION)
 [ "$DEBUG" = "1" ] && ARGS+=(--debug)
 
-echo "fit_glmsingle: sub-${PARTICIPANT_LABEL}  deriv=${FMRIPREP_DERIV}  debug=${DEBUG}"
+echo "fit_glmsingle: sub-${PARTICIPANT_LABEL}  deriv=${FMRIPREP_DERIV}  fwhm=${FWHM}mm  debug=${DEBUG}"
 echo "Args: ${ARGS[*]}"
 
 # Load conda environment

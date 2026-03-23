@@ -153,14 +153,15 @@ def build_design_matrix(events, n_vols, condition_to_idx):
 
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmriprep',
-         debug=False):
+         fwhm=0, debug=False):
     sub = Subject(subject, bids_folder=bids_folder)
 
     if sessions is None:
         sessions = sub.get_sessions()
 
     ses_label = f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
-    print(f'sub-{subject}  {ses_label}  [{fmriprep_deriv}]')
+    glmsingle_deriv = f'glmsingle_s{fwhm}mm' if fwhm else 'glmsingle'
+    print(f'sub-{subject}  {ses_label}  [{fmriprep_deriv}]  fwhm={fwhm}mm  → {glmsingle_deriv}')
 
     # First pass: collect all events to build a globally consistent condition map
     session_run_events = {}
@@ -192,6 +193,8 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
             if ref_bold is None:
                 ref_bold = bold_path
             img = image.load_img(str(bold_path))
+            if fwhm:
+                img = image.smooth_img(img, fwhm)
             bold_data = img.get_fdata()
             n_vols = bold_data.shape[3]
 
@@ -210,7 +213,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
             all_trial_metadata.extend(trial_meta)
             session_indicators.append(session)
 
-    out_dir = (Path(bids_folder) / 'derivatives' / 'glmsingle'
+    out_dir = (Path(bids_folder) / 'derivatives' / glmsingle_deriv
                / f'sub-{subject}' / ses_label / 'func')
     out_dir.mkdir(parents=True, exist_ok=True)
     fig_dir = out_dir.parent / 'figures'
@@ -255,6 +258,9 @@ if __name__ == '__main__':
     parser.add_argument('--bids-folder', default=str(BIDS_FOLDER))
     parser.add_argument('--fmriprep-deriv', default='fmriprep',
                         help='Name of the fmriprep derivatives folder (default: fmriprep).')
+    parser.add_argument('--fwhm', type=float, default=0,
+                        help='Spatial smoothing FWHM in mm applied to BOLD before GLMsingle. '
+                             '0 = no smoothing (default). Output goes to glmsingle_s{fwhm}mm.')
     parser.add_argument('--debug', action='store_true',
                         help='Write outputs and figures for all 4 GLMsingle model steps.')
     args = parser.parse_args()
@@ -262,4 +268,5 @@ if __name__ == '__main__':
     main(args.subject, sessions=args.sessions,
          bids_folder=args.bids_folder,
          fmriprep_deriv=args.fmriprep_deriv,
+         fwhm=args.fwhm,
          debug=args.debug)

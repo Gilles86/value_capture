@@ -52,7 +52,7 @@ PIXEL_SIZE_DEG = 0.2   # degrees per pixel
 
 # ── derive geometry from default.yml (mirrors session.py) ────────────────────
 _SETTINGS_FILE = (
-    Path(__file__).parents[3] / 'experiment' / 'settings' / 'default.yml'
+    Path(__file__).parents[2] / 'experiment' / 'settings' / 'default.yml'
 )
 
 
@@ -161,21 +161,21 @@ def _get_gm_mask(sub, session, bids_folder, threshold):
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
-         gm_threshold=None, gd_iterations=1000):
+         gm_threshold=None, gd_iterations=1000, glmsingle_deriv='glmsingle'):
 
     sub = Subject(subject, bids_folder=bids_folder)
     if sessions is None:
         sessions = sub.get_sessions()
 
     ses_label = f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
-    print(f'sub-{subject}  {ses_label}')
+    print(f'sub-{subject}  {ses_label}  [{glmsingle_deriv}]')
     print(f'  FOV: {GEOM["fov_size"]:.3f}° diam,  bar_width: {GEOM["bar_width"]:.3f}°')
     print(f'  Grid: {GRID_RES}×{GRID_RES} px @ {PIXEL_SIZE_DEG}°/px  '
           f'({GRID_RES ** 2} pixels total)')
 
     # ── load GLMsingle betas and trial metadata ───────────────────────────────
-    betas_img = sub.get_single_trial_estimates(sessions)
-    trials = sub.get_trial_metadata(sessions).reset_index(drop=True)
+    betas_img = sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv)
+    trials = sub.get_trial_metadata(sessions, glmsingle_deriv=glmsingle_deriv).reset_index(drop=True)
     assert len(trials) == betas_img.shape[3], (
         f'Trial count mismatch: {len(trials)} rows in TSV but '
         f'{betas_img.shape[3]} beta volumes'
@@ -243,8 +243,11 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
           f'(n voxels R²>0.1: {(r2 > 0.1).sum()})')
 
     # ── save ──────────────────────────────────────────────────────────────────
+    # Put results under prf/<glmsingle_deriv>/ so smoothed and unsmoothed
+    # fits live in separate directories.
+    prf_deriv = f'prf_{glmsingle_deriv}'
     out_dir = (
-        Path(bids_folder) / 'derivatives' / 'prf'
+        Path(bids_folder) / 'derivatives' / prf_deriv
         / f'sub-{subject}' / ses_label / 'func'
     )
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -295,6 +298,9 @@ if __name__ == '__main__':
     )
     parser.add_argument('--gd-iterations', type=int, default=1000,
                         help='Max gradient descent iterations (default: 1000).')
+    parser.add_argument('--glmsingle-deriv', default='glmsingle',
+                        help='GLMsingle derivatives folder to read betas from '
+                             '(default: glmsingle). Use glmsingle_s6mm for smoothed betas.')
     args = parser.parse_args()
 
     main(
@@ -303,4 +309,5 @@ if __name__ == '__main__':
         bids_folder=args.bids_folder,
         gm_threshold=args.gm_threshold,
         gd_iterations=args.gd_iterations,
+        glmsingle_deriv=args.glmsingle_deriv,
     )
