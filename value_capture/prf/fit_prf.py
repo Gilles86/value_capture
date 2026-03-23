@@ -308,29 +308,36 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     )
     ref_img = sub.get_brain_mask(sessions[0])
 
-    # 5-volume params NIfTI  (x, y, sd, baseline, amplitude)
-    param_vols = [
-        masking.unmask(pars_gd[col].values.astype(np.float32), mask_img)
-        for col in ['x', 'y', 'sd', 'baseline', 'amplitude']
-    ]
-    image.concat_imgs(param_vols).to_filename(
-        str(out_dir / (fn_base.format(desc='prf') + '_params.nii.gz'))
-    )
+    def _save(arr, desc):
+        masking.unmask(arr.astype(np.float32), mask_img).to_filename(
+            str(out_dir / (fn_base.format(desc=desc) + '_pe.nii.gz')))
 
-    # R² NIfTI
-    masking.unmask(r2.values.astype(np.float32), mask_img).to_filename(
-        str(out_dir / (fn_base.format(desc='prfR2') + '_pe.nii.gz'))
-    )
+    # Individual parameter NIfTIs
+    for col in ['x', 'y', 'sd', 'baseline', 'amplitude']:
+        _save(pars_gd[col].values, f'prf{col}')
 
-    # Parameters TSV
-    pars_gd.to_csv(
+    # Derived maps
+    ecc = np.sqrt(pars_gd['x'].values ** 2 + pars_gd['y'].values ** 2)
+    angle = np.degrees(np.arctan2(pars_gd['y'].values, pars_gd['x'].values))
+    _save(ecc,   'prfecc')
+    _save(angle, 'prfangle')
+
+    # R²
+    _save(r2.values, 'prfR2')
+
+    # Parameters TSV (includes ecc + angle for convenience)
+    pars_out = pars_gd.copy()
+    pars_out['ecc']   = ecc
+    pars_out['angle'] = angle
+    pars_out['r2']    = r2.values
+    pars_out.to_csv(
         str(out_dir / (fn_base.format(desc='prf') + '_params.tsv')),
         sep='\t',
     )
 
     print(f'\nSaved to {out_dir}')
-    print(f'  params : {fn_base.format(desc="prf")}_params.nii.gz  (5 vols)')
-    print(f'  R²     : {fn_base.format(desc="prfR2")}_pe.nii.gz')
+    for col in ['x', 'y', 'sd', 'baseline', 'amplitude', 'ecc', 'angle', 'R2']:
+        print(f'  {fn_base.format(desc=f"prf{col}")}_pe.nii.gz')
 
 
 if __name__ == '__main__':
