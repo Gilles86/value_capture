@@ -26,7 +26,7 @@ dependencies:
   - bambi
   - arviz
   - pip:
-    - jax             # required by hssm's numpyro sampler
+    - jax[cuda12]     # required by hssm's numpyro sampler + braincoder (Keras backend)
     - absl-py         # transitive hssm dep (jaxonnxruntime)
     - hssm            # Hierarchical Sequential Sampling Models (DDM etc.)
     - pybids          # BIDS dataset access
