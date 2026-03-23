@@ -37,6 +37,17 @@ from pathlib import Path
 # Must be set before keras/braincoder is imported
 os.environ.setdefault('KERAS_BACKEND', 'jax')
 
+# --cpu flag: disable MPS/CUDA so Keras/torch falls back to CPU.
+# Parse just this one flag early, before any GPU-touching imports.
+if '--cpu' in os.sys.argv:
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''
+    try:
+        import torch
+        torch.backends.mps.is_available = lambda: False
+        torch.backends.mps.is_built = lambda: False
+    except ImportError:
+        pass
+
 import numpy as np
 import pandas as pd
 import yaml
@@ -146,9 +157,17 @@ def _get_gm_mask(sub, session, bids_folder, threshold):
         Path(bids_folder) / 'derivatives' / 'fmriprep'
         / f'sub-{sub.subject_id}' / f'ses-{session}' / 'anat'
     )
+    # fmriprep writes native-T1w-space probsegs without a space entity;
+    # try space-T1w first (some versions include it), then fall back.
     candidates = sorted(anat_dir.glob(
         f'sub-{sub.subject_id}*space-T1w*label-GM_probseg.nii.gz'
     ))
+    if not candidates:
+        candidates = sorted(anat_dir.glob(
+            f'sub-{sub.subject_id}*label-GM_probseg.nii.gz'
+        ))
+        # exclude any MNI-space files that slipped through
+        candidates = [c for c in candidates if 'space-MNI' not in c.name]
     if not candidates:
         return None
 
@@ -161,7 +180,8 @@ def _get_gm_mask(sub, session, bids_folder, threshold):
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
-         gm_threshold=None, gd_iterations=1000, glmsingle_deriv='glmsingle'):
+         gm_threshold=None, gd_iterations=1000, glmsingle_deriv='glmsingle',
+         voxel_chunk_size=5000):
 
     sub = Subject(subject, bids_folder=bids_folder)
     if sessions is None:
@@ -228,16 +248,47 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
 
     print('  Grid search...')
     pars_grid = par_fitter.fit_grid(
-        x_grid, y_grid, sd_grid,
+        x=x_grid,
+        y=y_grid,
+        sd=sd_grid,
         baseline=[np.float32(0.0)],
         amplitude=[np.float32(1.0)],
         use_correlation_cost=True,
     )
     pars_ols = par_fitter.refine_baseline_and_amplitude(pars_grid)
 
-    # ── gradient descent ──────────────────────────────────────────────────────
-    print(f'  Gradient descent ({gd_iterations} iterations)...')
-    pars_gd = par_fitter.fit(init_pars=pars_ols, max_n_iterations=gd_iterations)
+    # ── gradient descent (chunked to avoid GPU OOM) ───────────────────────────
+    print(f'  Gradient descent ({gd_iterations} iterations, '
+          f'chunk_size={voxel_chunk_size})...')
+    n_vox = data_df.shape[1]
+    chunks = range(0, n_vox, voxel_chunk_size)
+    pars_chunks = []
+    for i, start in enumerate(chunks):
+        end = min(start + voxel_chunk_size, n_vox)
+        print(f'    chunk {i+1}/{len(chunks)}  voxels {start}–{end}')
+        chunk_data = data_df.iloc[:, start:end]
+        chunk_init = pars_ols.iloc[start:end]
+        chunk_model = GaussianPRF2D(
+            data=chunk_data,
+            paradigm=paradigm_df,
+            grid_coordinates=grid_coords,
+        )
+        chunk_fitter = ParameterFitter(
+            model=chunk_model, data=chunk_data, paradigm=paradigm_df)
+        pars_chunks.append(
+            chunk_fitter.fit(init_pars=chunk_init, max_n_iterations=gd_iterations))
+        # free GPU memory between chunks
+        del chunk_model, chunk_fitter, chunk_data, chunk_init
+        try:
+            import torch
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            elif torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+
+    pars_gd = pd.concat(pars_chunks)
     r2 = par_fitter.get_rsq(pars_gd)
     print(f'  Median R²: {r2.median():.3f}  '
           f'(n voxels R²>0.1: {(r2 > 0.1).sum()})')
@@ -301,6 +352,11 @@ if __name__ == '__main__':
     parser.add_argument('--glmsingle-deriv', default='glmsingle',
                         help='GLMsingle derivatives folder to read betas from '
                              '(default: glmsingle). Use glmsingle_s6mm for smoothed betas.')
+    parser.add_argument('--cpu', action='store_true',
+                        help='Force CPU (disable MPS/CUDA). Useful for local debugging.')
+    parser.add_argument('--voxel-chunk-size', type=int, default=5000,
+                        help='Number of voxels per gradient-descent chunk (default: 5000). '
+                             'Reduce if GPU runs out of memory; increase for speed on large GPUs.')
     args = parser.parse_args()
 
     main(
@@ -310,4 +366,5 @@ if __name__ == '__main__':
         gm_threshold=args.gm_threshold,
         gd_iterations=args.gd_iterations,
         glmsingle_deriv=args.glmsingle_deriv,
+        voxel_chunk_size=args.voxel_chunk_size,
     )

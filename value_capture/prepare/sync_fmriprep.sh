@@ -50,7 +50,14 @@ $RSYNC "${EXCLUDES[@]}" \
   --exclude '*' \
   "$SRC" "$DST"
 
-echo "=== Pass 5: T1w anatomicals (NIfTI + .gii) ==="
+echo "=== Pass 5: GM/WM/CSF probability segmentations (for PRF GM masking) ==="
+$RSYNC \
+  --include '*/' \
+  --include '*_label-*_probseg.nii.gz' \
+  --exclude '*' \
+  "$SRC" "$DST"
+
+echo "=== Pass 6: T1w anatomicals (NIfTI + .gii) ==="
 # Note: hemi exclusion deliberately omitted here — all anat .gii surfaces have hemi-L/R in name.
 # func/ excluded entirely to keep this anat-only.
 $RSYNC \

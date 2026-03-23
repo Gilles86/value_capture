@@ -27,6 +27,8 @@ dependencies:
   - arviz
   - pip:
     - jax             # keras backend for braincoder; also required by hssm's numpyro sampler
+    - jax-metal       # Apple Silicon Metal GPU backend for JAX
+    - torch           # PyTorch — alternative Keras backend (MPS GPU on Apple Silicon)
     - absl-py         # transitive hssm dep (jaxonnxruntime)
     - hssm            # Hierarchical Sequential Sampling Models (DDM etc.)
     - pybids          # BIDS dataset access
