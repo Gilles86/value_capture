@@ -26,15 +26,22 @@ drift so nilearn's own drift model is disabled.
 Contrasts
 ---------
   value_linear    : dist_rank2 - dist_rank0
-                    (BOLD scales linearly with distractor value)
+                    (BOLD scales linearly with distractor value; proximate reward)
   value_capture   : dist_rank2 - dist_absent
                     (high-value distractor vs no distractor; signature effect)
+  value_nonlinear : dist_rank1 - (dist_rank0 + dist_rank2) / 2
+                    (nonlinear/quadratic value coding; tests whether medium-value
+                    response deviates from linear interpolation between low/high)
+  value_step_low  : dist_rank1 - dist_rank0
+                    (low→medium value step)
+  value_step_high : dist_rank2 - dist_rank1
+                    (medium→high value step)
   distractor_any  : (dist_rank0 + dist_rank1 + dist_rank2) / 3 - dist_absent
                     (attentional capture regardless of value)
   feedback        : feedback_shown - feedback_omitted
-                    (any feedback vs no feedback)
+                    (any explicit feedback vs no feedback; RPE proxy)
   feedback_value  : feedback_points
-                    (BOLD scales with log magnitude of reward received)
+                    (BOLD scales with log magnitude of reward received; RPE magnitude)
 
 Timing
 ------
@@ -79,11 +86,23 @@ warnings.filterwarnings('ignore')
 TR = 1.6
 
 CONTRASTS = {
-    'value_linear':   'dist_rank2 - dist_rank0',
-    'value_capture':  'dist_rank2 - dist_absent',
-    'distractor_any': '(dist_rank0 + dist_rank1 + dist_rank2) / 3 - dist_absent',
-    'feedback':       'feedback_shown - feedback_omitted',
-    'feedback_value': 'feedback_points',
+    # Proximate reward: BOLD scales with distractor value (linear trend)
+    'value_linear':      'dist_rank2 - dist_rank0',
+    # Signature value-capture effect: high value vs no distractor
+    'value_capture':     'dist_rank2 - dist_absent',
+    # Nonlinear value: is medium value over/under-represented vs. linear?
+    # Positive = inverted-U (more response to middle rank than expected from linear)
+    # Negative = U-shaped (suppressed response to middle)
+    'value_nonlinear':   'dist_rank1 - (dist_rank0 + dist_rank2) / 2',
+    # Fine-grained steps: does each rank step drive equal BOLD increments?
+    'value_step_low':    'dist_rank1 - dist_rank0',
+    'value_step_high':   'dist_rank2 - dist_rank1',
+    # Any distractor vs absent
+    'distractor_any':    '(dist_rank0 + dist_rank1 + dist_rank2) / 3 - dist_absent',
+    # RPE proxy: any explicit feedback vs. no feedback
+    'feedback':          'feedback_shown - feedback_omitted',
+    # RPE magnitude: BOLD scales with log(earned_points) — reward prediction error proxy
+    'feedback_value':    'feedback_points',
 }
 
 
