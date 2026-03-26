@@ -53,52 +53,88 @@ def get_masked_vertex(values, alpha, subject, vmin, vmax, cmap='RdBu_r'):
     return v.blend_curvature(alpha)
 
 
+def _draw_polar_disk(ax, vmin=1/6, vmax=5/6, n_wedges=720):
+    """Draw a circular polar angle legend coloured with HSV from vmin to vmax.
+
+    Convention: UVM at top, HM left/right, LVM at bottom.  Both hemifields
+    are shown symmetrically (mirror image), matching the contralateral-field
+    display used in pycortex.
+    """
+    from matplotlib.patches import Wedge, Circle
+
+    ax.set_aspect('equal')
+    ax.axis('off')
+
+    angles = np.linspace(0, 360, n_wedges + 1)
+    for i in range(n_wedges):
+        mid_rad = np.radians((angles[i] + angles[i + 1]) / 2)
+        # Convert matplotlib angle (0=right, CCW) → visual-field angle (0=top, CW)
+        visual = np.mod(np.pi / 2 - mid_rad, 2 * np.pi)
+        # Symmetric: both halves (right VF / left VF) use the same colour
+        norm_val = np.minimum(visual, 2 * np.pi - visual) / np.pi * (vmax - vmin) + vmin
+        ax.add_patch(Wedge((0, 0), 1.0, angles[i], angles[i + 1],
+                           color=plt.cm.hsv(norm_val), linewidth=0))
+
+    # White centre hole
+    ax.add_patch(Circle((0, 0), 0.38, color='white', zorder=5))
+
+    # Cardinal labels
+    r = 1.25
+    ax.text(0,  r,  'upper\nVM', ha='center', va='bottom', fontsize=8, fontweight='bold')
+    ax.text(0, -r,  'lower\nVM', ha='center', va='top',    fontsize=8, fontweight='bold')
+    ax.text( r, 0,  'HM',        ha='left',   va='center', fontsize=8, fontweight='bold')
+    ax.text(-r, 0,  'HM',        ha='right',  va='center', fontsize=8, fontweight='bold')
+
+    ax.set_title('Polar angle  (contralateral hemifield)', fontsize=9, pad=4)
+    ax.set_xlim(-1.6, 1.6)
+    ax.set_ylim(-1.6, 1.6)
+
+
 def save_colorbar_pdf(out_path, r2_threshold, r2_vmax, has_benson=True):
     """Write a PDF with colorbars for every PRF map and a Benson ROI legend."""
-    continuous = [
-        ('R²',                        'hot',           r2_threshold, r2_vmax, ''),
-        ('Eccentricity',              'nipy_spectral', 0,            4,       '°'),
-        ('Polar angle (contralateral hemifield)', 'hsv', 1/6,        5/6,     '← upper VM  |  HM  |  lower VM →'),
-        ('PRF size σ',                'nipy_spectral', 0,            3,       '°'),
-        ('x position',                'coolwarm',      -4,           4,       '°  (left ← | → right)'),
-        ('y position',                'coolwarm',      -4,           4,       '°  (down ← | → up)'),
+    from matplotlib.gridspec import GridSpec
+
+    # Linear colorbars — polar angle replaced by the circular disk below
+    linear_bars = [
+        ('R²',             'hot',           r2_threshold, r2_vmax, ''),
+        ('Eccentricity',   'nipy_spectral', 0,            4,       '°'),
+        ('PRF size σ',     'nipy_spectral', 0,            3,       '°'),
+        ('x position',     'coolwarm',      -4,           4,       '°  (left ← | → right)'),
+        ('y position',     'coolwarm',      -4,           4,       '°  (down ← | → up)'),
     ]
+    if has_benson:
+        linear_bars.append(('Benson eccentricity', 'nipy_spectral', 0, 8, '°'))
 
-    n_cont = len(continuous)
-    n_rows = n_cont + (3 if has_benson else 0)  # benson_angle + benson_ecc + roi legend
-    fig, axes = plt.subplots(n_rows, 1, figsize=(6, 1.4 * n_rows))
-    if n_rows == 1:
-        axes = [axes]
+    n_linear = len(linear_bars)
+    disk_h   = 4   # height of the polar-disk row relative to a normal bar row
+    n_legend = 1 if has_benson else 0
+    height_ratios = [1] * n_linear + [disk_h] + [1] * n_legend
+    n_rows = n_linear + 1 + n_legend
 
-    for ax, (label, cmap, vmin, vmax, unit) in zip(axes[:n_cont], continuous):
+    fig = plt.figure(figsize=(6, 1.4 * (n_linear + n_legend) + 1.4 * disk_h))
+    gs = GridSpec(n_rows, 1, height_ratios=height_ratios, hspace=0.55,
+                  top=0.97, bottom=0.02)
+
+    for i, (label, cmap, vmin, vmax, unit) in enumerate(linear_bars):
+        ax = fig.add_subplot(gs[i])
         cb = ColorbarBase(ax, cmap=cmap, norm=Normalize(vmin=vmin, vmax=vmax),
                           orientation='horizontal')
-        title = f'{label}  [{unit}]' if unit else label
-        cb.set_label(title)
+        cb.set_label(f'{label}  [{unit}]' if unit else label)
+
+    _draw_polar_disk(fig.add_subplot(gs[n_linear]))
 
     if has_benson:
-        benson_extra = [
-            ('Benson polar angle (matched to PRF scale)', 'hsv', 1/6, 5/6,
-             '← upper VM  |  HM  |  lower VM →'),
-            ('Benson eccentricity', 'nipy_spectral', 0, 8, '°'),
-        ]
-        for ax, (label, cmap, vmin, vmax, unit) in zip(axes[n_cont:n_cont+2], benson_extra):
-            cb = ColorbarBase(ax, cmap=cmap, norm=Normalize(vmin=vmin, vmax=vmax),
-                              orientation='horizontal')
-            cb.set_label(f'{label}  [{unit}]')
-
-        ax = axes[n_cont + 2]
-        ax.axis('off')
+        ax_rois = fig.add_subplot(gs[n_linear + 1])
+        ax_rois.axis('off')
         cmap_tab20 = plt.cm.tab20
         patches = [
             mpatches.Patch(color=cmap_tab20(idx / 20), label=f'{idx}  {name}')
             for idx, name in BENSON_ROIS.items()
         ]
-        ax.legend(handles=patches, title='Benson atlas ROIs',
-                  loc='center', ncol=4, fontsize=9, title_fontsize=10,
-                  frameon=False)
+        ax_rois.legend(handles=patches, title='Benson atlas ROIs',
+                       loc='center', ncol=4, fontsize=9, title_fontsize=10,
+                       frameon=False)
 
-    fig.tight_layout()
     fig.savefig(str(out_path), bbox_inches='tight')
     plt.close(fig)
     print(f'Colorbars saved → {out_path}')
