@@ -78,8 +78,9 @@ def save_colorbar_pdf(out_path, r2_threshold, r2_vmax, has_benson=True):
 
     if has_benson:
         benson_extra = [
-            ('Benson polar angle', 'hsv',          0, 180, '°  (0=upper VM  90=HM  180=lower VM)'),
-            ('Benson eccentricity', 'nipy_spectral', 0,   8, '°'),
+            ('Benson polar angle (matched to PRF scale)', 'hsv', 0, 1,
+             '← upper VM  |  HM  |  lower VM →'),
+            ('Benson eccentricity', 'nipy_spectral', 0, 8, '°'),
         ]
         for ax, (label, cmap, vmin, vmax, unit) in zip(axes[n_cont:n_cont+2], benson_extra):
             cb = ColorbarBase(ax, cmap=cmap, norm=Normalize(vmin=vmin, vmax=vmax),
@@ -156,8 +157,11 @@ def visualize_prf(subject, prf_deriv='prf_glmsingle', sessions=None,
         roi_alpha = (varea > 0).astype(np.float32)
         ds[f'{subject}.benson_rois']  = get_masked_vertex(varea,       roi_alpha, cx_subject,
                                                            vmin=0,   vmax=12,  cmap='tab20')
-        ds[f'{subject}.benson_angle'] = get_masked_vertex(benson_angle, roi_alpha, cx_subject,
-                                                           vmin=0,   vmax=180, cmap='hsv')
+        # Normalise to same [0,1] HSV scale as fitted polar angle:
+        # UVM (0°) → 1/6, HM (90°) → 1/2, LVM (180°) → 5/6
+        benson_angle_norm = benson_angle / 270.0 + 1.0 / 6.0
+        ds[f'{subject}.benson_angle'] = get_masked_vertex(benson_angle_norm, roi_alpha, cx_subject,
+                                                           vmin=0,   vmax=1,   cmap='hsv')
         ds[f'{subject}.benson_ecc']   = get_masked_vertex(benson_ecc,   roi_alpha, cx_subject,
                                                            vmin=0,   vmax=8,   cmap='nipy_spectral')
         has_benson = True
