@@ -58,7 +58,7 @@ def save_colorbar_pdf(out_path, r2_threshold, r2_vmax, has_benson=True):
     continuous = [
         ('R²',                        'hot',           r2_threshold, r2_vmax, ''),
         ('Eccentricity',              'nipy_spectral', 0,            4,       '°'),
-        ('Polar angle (contralateral hemifield)', 'hsv', 0,          1,       '← upper  |  lower →'),
+        ('Polar angle (contralateral hemifield)', 'hsv', 1/6,        5/6,     '← upper VM  |  HM  |  lower VM →'),
         ('PRF size σ',                'nipy_spectral', 0,            3,       '°'),
         ('x position',                'coolwarm',      -4,           4,       '°  (left ← | → right)'),
         ('y position',                'coolwarm',      -4,           4,       '°  (down ← | → up)'),
@@ -78,7 +78,7 @@ def save_colorbar_pdf(out_path, r2_threshold, r2_vmax, has_benson=True):
 
     if has_benson:
         benson_extra = [
-            ('Benson polar angle (matched to PRF scale)', 'hsv', 0, 1,
+            ('Benson polar angle (matched to PRF scale)', 'hsv', 1/6, 5/6,
              '← upper VM  |  HM  |  lower VM →'),
             ('Benson eccentricity', 'nipy_spectral', 0, 8, '°'),
         ]
@@ -131,7 +131,7 @@ def visualize_prf(subject, prf_deriv='prf_glmsingle', sessions=None,
     ds = {
         f'{subject}.r2':          get_masked_vertex(r2,                 alpha, cx_subject, vmin=r2_threshold, vmax=r2_vmax, cmap='hot'),
         f'{subject}.ecc':         get_masked_vertex(ecc,                alpha, cx_subject, vmin=0,  vmax=4,  cmap='nipy_spectral'),
-        f'{subject}.polar_angle': get_masked_vertex(theta_hemi,         alpha, cx_subject, vmin=0,  vmax=1,  cmap='hsv'),
+        f'{subject}.polar_angle': get_masked_vertex(theta_hemi,         alpha, cx_subject, vmin=1/6, vmax=5/6, cmap='hsv'),
         f'{subject}.sd':          get_masked_vertex(pars['sd'].values,  alpha, cx_subject, vmin=0,  vmax=3,  cmap='nipy_spectral'),
         f'{subject}.x':           get_masked_vertex(pars['x'].values,   alpha, cx_subject, vmin=-4, vmax=4,  cmap='coolwarm'),
         f'{subject}.y':           get_masked_vertex(pars['y'].values,   alpha, cx_subject, vmin=-4, vmax=4,  cmap='coolwarm'),
@@ -161,7 +161,7 @@ def visualize_prf(subject, prf_deriv='prf_glmsingle', sessions=None,
         # UVM (0°) → 1/6, HM (90°) → 1/2, LVM (180°) → 5/6
         benson_angle_norm = benson_angle / 270.0 + 1.0 / 6.0
         ds[f'{subject}.benson_angle'] = get_masked_vertex(benson_angle_norm, roi_alpha, cx_subject,
-                                                           vmin=0,   vmax=1,   cmap='hsv')
+                                                           vmin=1/6, vmax=5/6, cmap='hsv')
         ds[f'{subject}.benson_ecc']   = get_masked_vertex(benson_ecc,   roi_alpha, cx_subject,
                                                            vmin=0,   vmax=8,   cmap='nipy_spectral')
         has_benson = True
