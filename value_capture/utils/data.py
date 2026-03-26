@@ -2,7 +2,11 @@ import os
 import os.path as op
 from importlib.resources import files
 import yaml
+import numpy as np
+import nibabel as nib
 import pandas as pd
+from nilearn import image, surface
+from nilearn.maskers import NiftiMasker
 
 
 BIDS_FOLDER = '/data/ds-valuecapture'
@@ -147,7 +151,7 @@ class Subject:
             raise FileNotFoundError(f'No confounds file: {fn}')
         df = pd.read_csv(fn, sep='\t')
         available = [c for c in columns if c in df.columns]
-        return df[available]
+        return df[available].fillna(0)
 
     def get_brain_mask(self, session, run=1, fmriprep_deriv='fmriprep',
                        space='T1w', res=None):
@@ -234,6 +238,172 @@ class Subject:
             im = image.concat_imgs(zscored)
 
         return im
+
+    # ------------------------------------------------------------------ #
+    # Surface / retinotopy helpers
+    # ------------------------------------------------------------------ #
+
+    PRF_PARAMS = ['x', 'y', 'sd', 'amplitude', 'baseline', 'ecc', 'angle', 'R2']
+
+    @property
+    def freesurfer_subjects_dir(self):
+        return op.join(self.bids_folder, 'derivatives', 'fmriprep',
+                       'sourcedata', 'freesurfer')
+
+    @property
+    def freesurfer_subject_id(self):
+        """Subject identifier used inside the FreeSurfer directory tree."""
+        return f'sub-{self.subject_id}_ses-1'
+
+    def get_surf_info(self):
+        """Return paths to inner (white), outer (pial), and midthickness surfaces."""
+        info = {}
+        anat_dir = op.join(self.bids_folder, 'derivatives', 'fmriprep',
+                           f'sub-{self.subject_id}', 'ses-1', 'anat')
+        for hemi in ['L', 'R']:
+            prefix = f'sub-{self.subject_id}_ses-1_hemi-{hemi}'
+            info[hemi] = {
+                'inner':       op.join(anat_dir, f'{prefix}_white.surf.gii'),
+                'outer':       op.join(anat_dir, f'{prefix}_pial.surf.gii'),
+                'midthickness': op.join(anat_dir, f'{prefix}_midthickness.surf.gii'),
+            }
+        return info
+
+    def _ses_label(self, sessions):
+        """Convert a sessions list (or None → all) to a ses-label string."""
+        if sessions is None:
+            return 'ses-all'
+        if isinstance(sessions, int):
+            sessions = [sessions]
+        return f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
+
+    def get_prf_parameters_volume(self, prf_deriv='prf_glmsingle', sessions=None):
+        """Return a dict of {param: NIfTI image} for each PRF parameter.
+
+        Parameters
+        ----------
+        prf_deriv : str
+            Name of the PRF derivatives folder, e.g. ``'prf_glmsingle'`` or
+            ``'prf_glmsingle_s6mm'`` (smoothed betas).
+        sessions : list of int or None
+            Sessions that were fitted together.  None → 'ses-all'.
+        """
+        ses_label = self._ses_label(sessions)
+        func_dir = op.join(self.bids_folder, 'derivatives', prf_deriv,
+                           f'sub-{self.subject_id}', ses_label, 'func')
+        fn_base = (f'sub-{self.subject_id}_{ses_label}_task-valuecapture'
+                   f'_space-T1w_desc-prf{{param}}_pe.nii.gz')
+        result = {}
+        for param in self.PRF_PARAMS:
+            fn = op.join(func_dir, fn_base.format(param=param))
+            if not op.exists(fn):
+                raise FileNotFoundError(f'PRF parameter not found: {fn}')
+            result[param] = nib.load(fn)
+        return result
+
+    def get_prf_parameters_surface(self, prf_deriv='prf_glmsingle',
+                                   sessions=None, space='fsnative'):
+        """Return surface PRF parameters as a DataFrame (vertex × param, indexed by hemi).
+
+        Requires that ``sample_prf_to_surface.py`` has already been run.
+        """
+        ses_label = self._ses_label(sessions)
+        func_dir = op.join(self.bids_folder, 'derivatives', prf_deriv,
+                           f'sub-{self.subject_id}', ses_label, 'func')
+        fn_base = (f'sub-{self.subject_id}_{ses_label}_task-valuecapture'
+                   f'_hemi-{{hemi}}_space-{space}_desc-prf{{param}}_pe.func.gii')
+        output = []
+        for param in self.PRF_PARAMS:
+            parts = []
+            for hemi in ['L', 'R']:
+                fn = op.join(func_dir, fn_base.format(hemi=hemi, param=param))
+                data = surface.load_surf_data(fn).squeeze()
+                parts.append(pd.Series(data, name=param,
+                                       index=pd.Index(range(len(data)), name='vertex')))
+            output.append(pd.concat(parts, keys=['L', 'R'], names=['hemi']))
+        return pd.concat(output, axis=1)
+
+    def get_t1w(self):
+        """Return the fmriprep preprocessed T1w image."""
+        fn = op.join(self.bids_folder, 'derivatives', 'fmriprep',
+                     f'sub-{self.subject_id}', 'ses-1', 'anat',
+                     f'sub-{self.subject_id}_ses-1_desc-preproc_T1w.nii.gz')
+        if not op.exists(fn):
+            raise FileNotFoundError(f'T1w not found: {fn}')
+        return image.load_img(fn)
+
+    def get_retinotopic_labels(self):
+        return {1: 'V1', 2: 'V2', 3: 'V3', 4: 'hV4', 5: 'VO1', 6: 'VO2',
+                7: 'LO1', 8: 'LO2', 9: 'TO1', 10: 'TO2', 11: 'V3A', 12: 'V3B'}
+
+    def get_retinotopic_atlas(self, bold_space=False, session=1, run=1):
+        """Load the neuropythy inferred_varea atlas (written by register_retinotopy.py).
+
+        Parameters
+        ----------
+        bold_space : bool
+            If True, resample to functional resolution using the brain mask from
+            ``session``/``run``.
+        """
+        varea_file = op.join(self.freesurfer_subjects_dir, self.freesurfer_subject_id,
+                             'mri', 'inferred_varea.mgz')
+        varea_img = image.load_img(varea_file)
+        varea_img = nib.Nifti1Image(varea_img.get_fdata(), affine=varea_img.affine)
+        if bold_space:
+            ref = self.get_brain_mask(session, run)
+            varea_img = image.resample_to_img(varea_img, ref,
+                                              interpolation='nearest',
+                                              force_resample=True,
+                                              copy_header=True)
+        return varea_img
+
+    def get_hemisphere_mask(self, hemi, bold_space=False, session=1, run=1):
+        """Return a binary NIfTI mask for one hemisphere derived from aparc+aseg."""
+        aseg_file = op.join(self.freesurfer_subjects_dir, self.freesurfer_subject_id,
+                            'mri', 'aparc+aseg.mgz')
+        aseg_img = image.load_img(aseg_file)
+        if hemi.upper() == 'L':
+            mask = image.math_img('(aseg >= 1000) & (aseg < 2000)', aseg=aseg_img)
+        elif hemi.upper() == 'R':
+            mask = image.math_img('(aseg >= 2000) & (aseg < 3000)', aseg=aseg_img)
+        else:
+            raise ValueError("hemi must be 'L' or 'R'")
+        mask = nib.Nifti1Image(mask.get_fdata().astype(np.float32), affine=mask.affine)
+        if bold_space:
+            ref = self.get_brain_mask(session, run)
+            mask = image.resample_to_img(mask, ref, interpolation='nearest',
+                                         force_resample=True)
+        return mask
+
+    def get_retinotopic_roi(self, roi=None, bold_space=False, session=1, run=1):
+        """Return a binary mask NIfTI for a named retinotopic ROI (e.g., 'V1', 'V1_L').
+
+        If ``roi`` is None, return the full atlas image.
+        Suffix ``_L`` / ``_R`` restricts to one hemisphere.
+        """
+        atlas = self.get_retinotopic_atlas(bold_space=bold_space,
+                                           session=session, run=run)
+        labels = self.get_retinotopic_labels()
+        if roi is None:
+            return atlas
+
+        hemi = None
+        roi_name = roi
+        if roi.endswith('_L'):
+            hemi, roi_name = 'L', roi[:-2]
+        elif roi.endswith('_R'):
+            hemi, roi_name = 'R', roi[:-2]
+
+        idx = next((k for k, v in labels.items() if v == roi_name), None)
+        if idx is None:
+            raise ValueError(f'Unknown ROI: {roi_name!r}. Known: {list(labels.values())}')
+
+        roi_mask = image.math_img(f'atlas == {idx}', atlas=atlas)
+        if hemi is not None:
+            hemi_mask = self.get_hemisphere_mask(hemi, bold_space=bold_space,
+                                                 session=session, run=run)
+            roi_mask = image.math_img('roi * hemi', roi=roi_mask, hemi=hemi_mask)
+        return roi_mask
 
     def get_behavioral_data(self, session=None, run=None, exclude_outlier_rts=True):
         """Return per-trial behavioral data as a DataFrame.
