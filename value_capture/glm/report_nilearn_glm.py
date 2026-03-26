@@ -30,7 +30,7 @@ from matplotlib.gridspec import GridSpec
 import numpy as np
 
 from nilearn import image
-from nilearn.image import threshold_stats_img
+from nilearn.glm import threshold_stats_img
 from nilearn.plotting import plot_stat_map, plot_glass_brain
 
 from value_capture.utils.data import Subject, BIDS_FOLDER
