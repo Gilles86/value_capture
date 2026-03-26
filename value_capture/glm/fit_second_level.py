@@ -63,12 +63,20 @@ CONTRASTS = [
 ]
 
 
+FALLBACK_Z = 2.3  # p < 0.01 uncorrected, used when FDR yields nothing
+
+
 def _contrast_page(pdf, z_map, name, expr, desc, fdr_thr, n_survived,
                    n_subjects, fdr_alpha):
-    survived_str = (f'FDR threshold: |z| ≥ {fdr_thr:.2f}  ({n_survived} voxels)'
-                    if fdr_thr is not None and n_survived > 0
-                    else 'No voxels survive FDR')
-    display_thr = fdr_thr if (fdr_thr is not None and n_survived > 0) else 1e6
+    if fdr_thr is not None and n_survived > 0:
+        survived_str = f'FDR threshold: |z| ≥ {fdr_thr:.2f}  ({n_survived} voxels)'
+        display_thr = fdr_thr
+        thr_label = 'FDR-thresholded'
+    else:
+        survived_str = (f'No voxels survive FDR  —  '
+                        f'showing uncorrected |z| > {FALLBACK_Z} (p < 0.01)')
+        display_thr = FALLBACK_Z
+        thr_label = f'uncorrected |z| > {FALLBACK_Z}'
 
     fig = plt.figure(figsize=(15, 10))
     gs = GridSpec(3, 1, figure=fig,
@@ -97,7 +105,7 @@ def _contrast_page(pdf, z_map, name, expr, desc, fdr_thr, n_survived,
             z_map, threshold=display_thr, colorbar=True,
             plot_abs=False, display_mode='lyrz',
             axes=ax_glass, vmax=6, annotate=False,
-            title='Glass brain (FDR-thresholded)')
+            title=f'Glass brain ({thr_label})')
     except Exception as e:
         ax_glass.text(0.5, 0.5, f'[glass brain unavailable: {e}]',
                       transform=ax_glass.transAxes, ha='center', va='center',
@@ -109,7 +117,7 @@ def _contrast_page(pdf, z_map, name, expr, desc, fdr_thr, n_survived,
             z_map, threshold=display_thr,
             display_mode='z', cut_coords=7,
             colorbar=True, axes=ax_stat, vmax=6,
-            title='Axial slices (FDR-thresholded)')
+            title=f'Axial slices ({thr_label})')
     except Exception as e:
         ax_stat.text(0.5, 0.5, f'[stat map unavailable: {e}]',
                      transform=ax_stat.transAxes, ha='center', va='center',
