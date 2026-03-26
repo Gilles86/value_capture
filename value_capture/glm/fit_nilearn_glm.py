@@ -230,7 +230,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
     run_labels = [f'ses-{ses} run-{run}'
                   for ses in sessions for run in sub.get_runs(ses)]
     for ax, dm, label in zip(axes, model.design_matrices_, run_labels):
-        plot_design_matrix(dm, ax=ax)
+        plot_design_matrix(dm, axes=ax)
         ax.set_title(label, fontsize=9)
     fig.suptitle(f'sub-{subject} design matrices', fontsize=11)
     dm_path = fig_dir / f'{fn_base}_design_matrix.png'
