@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=fit_glmsingle
+#SBATCH --account=zne.uzh
 #SBATCH --output=/home/gdehol/logs/fit_glmsingle_%j.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16

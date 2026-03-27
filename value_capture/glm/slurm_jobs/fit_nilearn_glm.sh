@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=fit_nilearn_glm
+#SBATCH --account=zne.uzh
 #SBATCH --output=/home/gdehol/logs/fit_nilearn_glm_%A_%a.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
