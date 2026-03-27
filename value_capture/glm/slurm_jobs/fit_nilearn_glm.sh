@@ -2,7 +2,7 @@
 #SBATCH --job-name=fit_nilearn_glm
 #SBATCH --output=/home/gdehol/logs/fit_nilearn_glm_%A_%a.txt
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
 #SBATCH --time=01:00:00
 
@@ -28,6 +28,7 @@ FMRIPREP_DERIV="${FMRIPREP_DERIV:-fmriprep}"
 SPACE="${SPACE:-T1w}"
 RES="${RES:-}"
 SMOOTHING_FWHM="${SMOOTHING_FWHM:-}"
+N_JOBS="${N_JOBS:-16}"
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
 REPO=$HOME/git/value_capture
@@ -42,6 +43,7 @@ ARGS=(
 [ -n "$SESSION" ]        && ARGS+=(--sessions $SESSION)
 [ -n "$RES" ]            && ARGS+=(--res "$RES")
 [ -n "$SMOOTHING_FWHM" ] && ARGS+=(--smoothing-fwhm "$SMOOTHING_FWHM")
+[ -n "$N_JOBS" ]         && ARGS+=(--n-jobs "$N_JOBS")
 
 echo "fit_nilearn_glm: sub-${PARTICIPANT_LABEL}  deriv=${FMRIPREP_DERIV}  space=${SPACE}  res=${RES}  smoothing=${SMOOTHING_FWHM}"
 echo "Args: ${ARGS[*]}"

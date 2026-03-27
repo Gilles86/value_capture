@@ -176,7 +176,7 @@ def build_events(onsets_df, n_removed):
 
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmriprep',
-         space='T1w', res=None, smoothing_fwhm=None):
+         space='T1w', res=None, smoothing_fwhm=None, n_jobs=1):
     sub = Subject(subject, bids_folder=bids_folder)
 
     if sessions is None:
@@ -185,7 +185,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
     res_label = f'_res-{res}' if res else ''
     space_tag = f'space-{space}{res_label}'
     smooth_tag = f'  smoothing={smoothing_fwhm} mm' if smoothing_fwhm else ''
-    print(f'sub-{subject}  sessions={sessions}  {space_tag}{smooth_tag}  [{fmriprep_deriv}]')
+    print(f'sub-{subject}  sessions={sessions}  {space_tag}{smooth_tag}  [{fmriprep_deriv}]  n_jobs={n_jobs}')
 
     imgs, events_list, confounds_list = [], [], []
 
@@ -224,6 +224,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
         smoothing_fwhm=smoothing_fwhm,
         standardize=False,
         mask_img=mask,
+        n_jobs=n_jobs,
     )
 
     print('\nFitting GLM...')
@@ -286,6 +287,9 @@ if __name__ == '__main__':
     parser.add_argument('--smoothing-fwhm', type=float, default=None,
                         help='Spatial smoothing kernel FWHM in mm applied before '
                              'fitting (e.g. 6). Default: no smoothing.')
+    parser.add_argument('--n-jobs', type=int, default=1,
+                        help='Parallel jobs for GLM fitting across runs (default: 1). '
+                             'Set to -1 to use all available CPUs.')
     parser.add_argument('--bids-folder', default=str(BIDS_FOLDER))
     parser.add_argument('--fmriprep-deriv', default='fmriprep',
                         help='Name of the fmriprep derivatives folder.')
@@ -297,4 +301,5 @@ if __name__ == '__main__':
          fmriprep_deriv=args.fmriprep_deriv,
          space=args.space,
          res=args.res,
-         smoothing_fwhm=args.smoothing_fwhm)
+         smoothing_fwhm=args.smoothing_fwhm,
+         n_jobs=args.n_jobs)
