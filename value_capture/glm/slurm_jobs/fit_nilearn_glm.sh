@@ -27,7 +27,7 @@ SESSION="${SESSION:-}"
 FMRIPREP_DERIV="${FMRIPREP_DERIV:-fmriprep}"
 SPACE="${SPACE:-T1w}"
 RES="${RES:-}"
-SMOOTHING_FWHM="${SMOOTHING_FWHM:-}"
+SMOOTHING_FWHM="${SMOOTHING_FWHM:-6}"
 N_JOBS="${N_JOBS:-16}"
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
