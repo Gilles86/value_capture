@@ -15,7 +15,8 @@ monitor:
   # gamma: 2.1
 
 design:
-  n_trials: 4           # must be divisible by 4 (conditions) and 2×n_bar_positions
+  n_trials: 4           # must be divisible by 2×n_bar_positions (4); 1+1+1+1 = 4
+  n_absent: 2           # 1 absent-low + 1 absent-high
   feedback_probability: 1.0   # always show feedback so it's easy to test
   n_runs: 6
   n_bar_positions: 2

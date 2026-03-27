@@ -146,18 +146,18 @@ class ValueCaptureSession(PylinkEyetrackerSession):
         """
         Resolve distractor RGB color from value rank and session condition.
 
-        value_rank: 0 (lowest reward), 1 (medium), 2 (highest reward), or None (absent)
-        value_condition=0: rank 0=full_green, rank 1=mid_orange, rank 2=full_orange
-        value_condition=1: rank 0=full_orange, rank 1=mid_orange, rank 2=full_green
+        value_rank: 0 (low reward), 2 (high reward), or None (absent)
+        value_condition=0: rank 0=full_green, rank 2=full_orange
+        value_condition=1: rank 0=full_orange, rank 2=full_green
 
         Returns GREY_RGB for absent trials (value_rank=None).
         """
         if value_rank is None:
             return GREY_RGB
         if self.value_condition == 0:
-            return VALUE_COLORS_RGB[value_rank]
+            return VALUE_COLORS_RGB[0] if value_rank == 0 else VALUE_COLORS_RGB[1]
         else:
-            return VALUE_COLORS_RGB[2 - value_rank]
+            return VALUE_COLORS_RGB[1] if value_rank == 0 else VALUE_COLORS_RGB[0]
 
     def get_bar_schedule(self, n_trials):
         """
@@ -312,31 +312,37 @@ class ValueCaptureSession(PylinkEyetrackerSession):
         assert n_trials % len(possible_iti1) == 0, 'n_trials must be divisible by len(iti1)'
         assert n_trials % len(possible_iti2) == 0, 'n_trials must be divisible by len(iti2)'
 
-        # Design: 4 equal conditions (25% each), mirroring the online osexp's equal-group structure
-        #   - 3 value ranks × n_per_condition distractor-present trials
-        #   - n_per_condition distractor-absent trials
-        #   - Total: n_trials (must be divisible by 4 and by 2×n_bar_positions)
-        assert n_trials % 4 == 0, 'n_trials must be divisible by 4 (3 value ranks + absent, 25% each)'
+        # Design: 2 distractor ranks (low/high) + absent trials split 50/50 by reward.
+        #   n_absent is set in settings (default 14 → 35% of 40 trials).
+        #   n_dist_per_rank = (n_trials - n_absent) // 2  (e.g. 13 for n_trials=40, n_absent=14)
+        #   Total: n_dist_per_rank × 2 + n_absent = n_trials
+        #   n_trials must be divisible by 2×n_bar_positions for the bar schedule.
+        n_absent = self.settings['design'].get('n_absent', 14)
+        assert n_absent % 2 == 0, 'n_absent must be even (50/50 low/high reward split)'
+        n_dist_per_rank = (n_trials - n_absent) // 2  # e.g. 13
+        assert (n_trials - n_absent) % 2 == 0, 'n_trials - n_absent must be even'
 
-        n_per_condition = n_trials // 4   # e.g. 15 for n_trials=60
-
-        # Distractor-present: n_per_condition per rank.
+        # Distractor-present: n_dist_per_rank each for ranks 0 (low) and 2 (high).
         # Balance distractor locations across the 4 positions as evenly as possible.
         distractor_trials = []
-        for value_rank in [0, 1, 2]:
-            base_reps = n_per_condition // 4
-            extra     = n_per_condition  % 4
+        for value_rank in [0, 2]:
+            base_reps = n_dist_per_rank // 4
+            extra     = n_dist_per_rank  % 4
             d_locs = np.array([1, 3, 5, 7] * base_reps + [1, 3, 5, 7][:extra])
             np.random.shuffle(d_locs)
             for d_loc in d_locs:
                 t_loc = np.random.choice([x for x in [1, 3, 5, 7] if x != d_loc])
                 distractor_trials.append((int(t_loc), int(d_loc), value_rank, True))
 
-        # Absent: n_per_condition trials, target locations balanced across 4 positions.
-        base_reps = n_per_condition // 4
-        extra     = n_per_condition  % 4
-        t_locs_absent = [1, 3, 5, 7] * base_reps + [1, 3, 5, 7][:extra]
-        absent_trials = [(t, None, None, False) for t in t_locs_absent]
+        # Absent: n_absent trials split evenly between rank 0 and rank 2 reward.
+        # Reward is non-predictive — no coloured distractor is shown.
+        n_absent_per_rank = n_absent // 2
+        absent_trials = []
+        for value_rank in [0, 2]:
+            base_reps = n_absent_per_rank // 4
+            extra     = n_absent_per_rank  % 4
+            t_locs = [1, 3, 5, 7] * base_reps + [1, 3, 5, 7][:extra]
+            absent_trials.extend([(t, None, value_rank, False) for t in t_locs])
 
         all_trials = distractor_trials + absent_trials
         np.random.shuffle(all_trials)

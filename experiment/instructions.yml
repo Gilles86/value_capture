@@ -27,22 +27,20 @@ intro: |
 value_colors: |
   - THE COLOURED DISTRACTOR -
 
-  On MOST trials, one bar will have a distinctive colour.
+  On most trials, one bar will have a distinctive colour.
   This colour tells you how many points you can earn on
   that trial if you respond correctly and quickly:
 
-    High-value colour  → up to 1000 points per trial
-    Medium-value colour → up to 500 points per trial
-    Low-value colour   → up to 100 points per trial
+    High-value colour → up to 1000 points per trial
+    Low-value colour  → up to 100 points per trial
 
-  There are three possible colours: full green, amber/orange,
-  and bright orange. Which colour is high- vs low-value
-  depends on your participant number and stays the same
-  throughout the whole experiment.
+  There are two possible colours: full green and bright orange.
+  Which colour is high- vs low-value depends on your participant
+  number and stays the same throughout the whole experiment.
 
   On some trials there will be NO coloured distractor at all —
-  all bars will be grey. You still earn a small base reward
-  for a correct, fast response on those trials.
+  all bars will be grey. You can still earn points on those
+  trials, but you won't know in advance how many.
 
   The faster and more accurately you respond,
   the more points you earn.

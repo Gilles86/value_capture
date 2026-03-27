@@ -10,18 +10,17 @@ def hex_to_psychopy_rgb(hex_color):
     return (r / 127.5 - 1, g / 127.5 - 1, b / 127.5 - 1)
 
 
-# Distractor value colors (3 levels)
+# Distractor value colors (2 levels: low and high reward only)
 # Rank 0 = lowest reward, rank 2 = highest reward.
-# Condition 0: full_green=lowest, mid_orange=medium, full_orange=highest
-# Condition 1: full_orange=lowest, mid_orange=medium, full_green=highest
+# Condition 0: full_green=low, full_orange=high
+# Condition 1: full_orange=low, full_green=high
 # The rank-to-color mapping is resolved in session based on value_condition.
 FULL_GREEN  = '#00ab78'
-MID_ORANGE  = '#999253'   # CIELAB midpoint between green & orange (ΔE≈46.5 to each endpoint; was #b58800 ΔE=75/31)
 FULL_ORANGE = '#d56f2c'
 GREY        = '#8f8f8f'   # color of target and all non-distractor items
 
-# index 0 = full_green (one end), index 1 = mid_orange, index 2 = full_orange (other end)
-VALUE_COLORS_HEX = [FULL_GREEN, MID_ORANGE, FULL_ORANGE]
+# index 0 = full_green, index 1 = full_orange
+VALUE_COLORS_HEX = [FULL_GREEN, FULL_ORANGE]
 VALUE_COLORS_RGB = [hex_to_psychopy_rgb(c) for c in VALUE_COLORS_HEX]
 GREY_RGB = hex_to_psychopy_rgb(GREY)
 
