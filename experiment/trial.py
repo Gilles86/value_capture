@@ -203,11 +203,10 @@ class InstructionArrayTrial(Trial):
         if show_value_legend:
             entries = [
                 (2, '× 100  (high value)'),
-                (1, '× 10   (medium value)'),
                 (0, '× 1    (low value)'),
             ]
             for i, (rank, label_txt) in enumerate(entries):
-                y = 2.5 - i * 2.5
+                y = 1.25 - i * 2.5
                 color = session.get_distractor_color(rank)
                 self.legend_bars.append(visual.Rect(
                     session.win,
@@ -325,12 +324,11 @@ class SingletonTrial(Trial):
         # distractor_present=False → no coloured singleton on this trial
         self.parameters['distractor_present'] = distractor_present
 
-        # Value rank: 0 = lowest reward, 2 = highest reward (3 levels)
-        # None when distractor is absent.
+        # Value rank: 0 = low reward, 2 = high reward (medium removed).
+        # Absent trials also have a rank assigned (non-predictive reward).
         if value_rank is None and distractor_present:
-            self.parameters['value_rank'] = np.random.choice([0, 1, 2])
+            self.parameters['value_rank'] = np.random.choice([0, 2])
         else:
-            # may be None for absent trials
             self.parameters['value_rank'] = value_rank
 
         self.parameters['target_orientation'] = (
@@ -455,10 +453,8 @@ class SingletonTrial(Trial):
 
                     if self.parameters['correct']:
                         target_duration = self.session.settings['durations'].get('target', 1.5)
-                        if self.parameters['distractor_present']:
-                            multiplier = self.session.points_key[self.parameters['value_rank']]
-                        else:
-                            multiplier = 1  # no reward multiplier on absent trials
+                        rank = self.parameters['value_rank']
+                        multiplier = self.session.points_key[rank] if rank is not None else 1
                         self.parameters['earned_points'] = max(
                             0, round((1 - self.parameters['rt'] / target_duration) * 10 * multiplier)
                         )

@@ -15,8 +15,9 @@ monitor:
   gamma: 1.0
 
 design:
-  n_trials: 40          # must be divisible by 4 (conditions) and 20 (2×n_bar_positions)
-                        # 30 distractor-present (3 ranks × 10 each) + 10 absent
+  n_trials: 40          # must be divisible by 20 (2×n_bar_positions); 40/20 = 2 bar cycles
+                        # 13 low-dist + 13 high-dist + 7 absent-low + 7 absent-high = 40
+  n_absent: 14          # absent trials per run (7 low + 7 high reward); 14/40 = 35%
   feedback_probability: 0.5   # fraction of scanning trials showing points feedback
   n_runs: 6
   n_bar_positions: 10   # positions per direction; 10 horiz + 10 vert = 20 total → 40/20 = 2 reps each
