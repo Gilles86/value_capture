@@ -14,10 +14,13 @@ with the SPM canonical HRF:
     dist_rank2    — high-value distractor
 
   Feedback phase (1.0 s):
-    feedback_shown    — feedback trials, unmodulated (mean response to feedback)
-    feedback_points   — feedback trials, amplitude = mean-centred log(1 + earned_points)
-                        (areas where BOLD scales with log reward magnitude)
-    feedback_omitted  — blank fixation on no-feedback trials
+    feedback_rank0_shown  — shown feedback, low-value distractor trial
+    feedback_rank1_shown  — shown feedback, medium-value distractor trial
+    feedback_rank2_shown  — shown feedback, high-value distractor trial
+    feedback_absent_shown — shown feedback, distractor-absent trial
+    feedback_points       — shown feedback, amplitude = mean-centred log(1 + earned_points)
+                            (areas where BOLD scales with log reward magnitude)
+    feedback_omitted      — blank fixation on no-feedback trials
 
 Motion parameters and anatomical CompCor + DCT cosines from fmriprep confounds
 are included as nuisance regressors.  The fmriprep cosines handle low-frequency
@@ -38,10 +41,15 @@ Contrasts
                     (medium→high value step)
   distractor_any  : (dist_rank0 + dist_rank1 + dist_rank2) / 3 - dist_absent
                     (attentional capture regardless of value)
-  feedback        : feedback_shown - feedback_omitted
+  feedback        : (feedback_rank0_shown + feedback_rank1_shown +
+                     feedback_rank2_shown + feedback_absent_shown) / 4 - feedback_omitted
                     (any explicit feedback vs no feedback; RPE proxy)
   feedback_value  : feedback_points
                     (BOLD scales with log magnitude of reward received; RPE magnitude)
+  feedback_step_low  : feedback_rank1_shown - feedback_rank0_shown
+                       (medium vs low value at feedback; value-dependent RPE)
+  feedback_step_high : feedback_rank2_shown - feedback_rank1_shown
+                       (high vs medium value at feedback; value-dependent RPE)
 
 Timing
 ------
@@ -100,9 +108,13 @@ CONTRASTS = {
     # Any distractor vs absent
     'distractor_any':    '(dist_rank0 + dist_rank1 + dist_rank2) / 3 - dist_absent',
     # RPE proxy: any explicit feedback vs. no feedback
-    'feedback':          'feedback_shown - feedback_omitted',
+    'feedback':          ('(feedback_rank0_shown + feedback_rank1_shown + '
+                          'feedback_rank2_shown + feedback_absent_shown) / 4 - feedback_omitted'),
     # RPE magnitude: BOLD scales with log(earned_points) — reward prediction error proxy
     'feedback_value':    'feedback_points',
+    # Value-dependent feedback: medium vs low rank, high vs medium rank
+    'feedback_step_low':  'feedback_rank1_shown - feedback_rank0_shown',
+    'feedback_step_high': 'feedback_rank2_shown - feedback_rank1_shown',
 }
 
 
@@ -139,7 +151,6 @@ def build_events(onsets_df, n_removed):
     # Log-transform points (log1p handles zeros) then mean-centre within run
     log_points = np.log1p(shown['earned_points'].fillna(0).values)
     mean_log_points = log_points.mean() if len(log_points) > 0 else 0.0
-    shown_idx = shown.index.tolist()
 
     for _, row in feedbacks.iterrows():
         onset = row['onset'] - dummy_offset
@@ -147,9 +158,14 @@ def build_events(onsets_df, n_removed):
             rows.append({'onset': onset, 'duration': 1.0,
                          'trial_type': 'feedback_omitted'})
         else:
-            # Unmodulated: captures average BOLD response to feedback
+            # Unmodulated: split by distractor rank on this trial so we can
+            # contrast medium-vs-low and high-vs-medium at feedback
+            if not row['distractor_present']:
+                fb_label = 'feedback_absent_shown'
+            else:
+                fb_label = f'feedback_rank{int(row["value_rank"])}_shown'
             rows.append({'onset': onset, 'duration': 1.0,
-                         'trial_type': 'feedback_shown'})
+                         'trial_type': fb_label})
             # Parametric: captures how BOLD scales with log reward magnitude
             log_val = np.log1p(float(row['earned_points'] or 0))
             rows.append({'onset': onset, 'duration': 1.0,

@@ -60,11 +60,19 @@ CONTRAST_INFO = [
      '(dist_rank0 + dist_rank1 + dist_rank2) / 3 − dist_absent',
      'Any distractor vs absent — attentional capture regardless of value'),
     ('feedback',
-     'feedback_shown − feedback_omitted',
+     '(feedback_rank{0,1,2}_shown + feedback_absent_shown) / 4 − feedback_omitted',
      'RPE proxy — any explicit feedback vs blank fixation'),
     ('feedback_value',
      'feedback_points  [parametric, log(1+pts), mean-centred per run]',
      'RPE magnitude — BOLD scales with log reward received at feedback'),
+    ('feedback_step_low',
+     'feedback_rank1_shown − feedback_rank0_shown',
+     'Value-dependent feedback — medium vs low value rank at feedback\n'
+     '(+) greater BOLD to medium-value trial feedback than low-value'),
+    ('feedback_step_high',
+     'feedback_rank2_shown − feedback_rank1_shown',
+     'Value-dependent feedback — high vs medium value rank at feedback\n'
+     '(+) greater BOLD to high-value trial feedback than medium-value'),
 ]
 
 
