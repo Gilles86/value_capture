@@ -18,7 +18,7 @@ Usage
 -----
   python fit_second_level.py
   python fit_second_level.py --subjects 01 02 03
-  python fit_second_level.py --space MNI152NLin2009cAsymm --res 2
+  python fit_second_level.py --space MNI152NLin2009cAsym --res 2
   python fit_second_level.py --bids-folder /shares/zne.uzh/gdehol/ds-valuecapture
 """
 
@@ -131,7 +131,7 @@ def _contrast_page(pdf, z_map, name, expr, desc, fdr_thr, n_survived,
     plt.close(fig)
 
 
-def main(subjects=None, bids_folder=BIDS_FOLDER, space='MNI152NLin2009cAsymm',
+def main(subjects=None, bids_folder=BIDS_FOLDER, space='MNI152NLin2009cAsym',
          res='2', fdr_alpha=0.05, cluster_threshold=10):
 
     if subjects is None:
@@ -237,7 +237,7 @@ if __name__ == '__main__':
     parser.add_argument('--subjects', nargs='+', default=None,
                         help='Subject IDs (default: all in subjects.yml)')
     parser.add_argument('--bids-folder', default=str(BIDS_FOLDER))
-    parser.add_argument('--space', default='MNI152NLin2009cAsymm')
+    parser.add_argument('--space', default='MNI152NLin2009cAsym')
     parser.add_argument('--res', default='2')
     parser.add_argument('--fdr-alpha', type=float, default=0.05)
     parser.add_argument('--cluster-threshold', type=int, default=10)

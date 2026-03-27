@@ -71,7 +71,7 @@ Per-subject z-score and effect-size maps:
 Usage:
     python fit_nilearn_glm.py 01
     python fit_nilearn_glm.py 01 --sessions 2
-    python fit_nilearn_glm.py 01 --space MNI152NLin2009cAsymm --res 2
+    python fit_nilearn_glm.py 01 --space MNI152NLin2009cAsym --res 2
     python fit_nilearn_glm.py 01 --smoothing-fwhm 6
     python fit_nilearn_glm.py 01 --bids-folder /shares/zne.uzh/gdehol/ds-valuecapture
 """
@@ -279,7 +279,7 @@ if __name__ == '__main__':
                         help='Session number(s) to fit. Default: all available.')
     parser.add_argument('--space', default='T1w',
                         help="BIDS space entity (default: T1w). "
-                             "Use 'MNI152NLin2009cAsymm' for MNI output.")
+                             "Use 'MNI152NLin2009cAsym' for MNI output.")
     parser.add_argument('--res', default=None,
                         help="BIDS res entity, e.g. '2' for 2 mm MNI. "
                              "Omit for T1w native resolution.")

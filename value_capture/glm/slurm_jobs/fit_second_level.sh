@@ -13,12 +13,12 @@
 #   sbatch fit_second_level.sh
 #
 # Optional overrides (--export key=value):
-#   SPACE             BIDS space entity (default: MNI152NLin2009cAsymm)
+#   SPACE             BIDS space entity (default: MNI152NLin2009cAsym)
 #   RES               BIDS res entity (default: 2)
 #   FDR_ALPHA         FDR significance level (default: 0.05)
 #   CLUSTER_THRESHOLD minimum cluster size in voxels (default: 10)
 
-SPACE="${SPACE:-MNI152NLin2009cAsymm}"
+SPACE="${SPACE:-MNI152NLin2009cAsym}"
 RES="${RES:-2}"
 FDR_ALPHA="${FDR_ALPHA:-0.05}"
 CLUSTER_THRESHOLD="${CLUSTER_THRESHOLD:-10}"
