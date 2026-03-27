@@ -10,14 +10,20 @@
 # Optional env overrides (export before calling):
 #   SPACE, RES, SMOOTHING_FWHM, FMRIPREP_DERIV, FDR_ALPHA, CLUSTER_THRESHOLD
 #
+# Defaults to MNI152NLin2009cAsymm res-2 to match the second-level GLM.
+#
 # Examples:
 #   bash submit_nilearn_glm.sh
-#   SPACE=MNI152NLin2009cAsymm RES=2 bash submit_nilearn_glm.sh
+#   SPACE=T1w RES= bash submit_nilearn_glm.sh  # native space only
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Subjects array index range (matches subjects.yml: 01 02 03)
 SUBJECT_ARRAY="1-3"
+
+# Defaults to match fit_second_level.sh (MNI152NLin2009cAsymm res-2)
+SPACE="${SPACE:-MNI152NLin2009cAsymm}"
+RES="${RES:-2}"
 
 # --- Optional export vars passed through to each job ---
 EXPORT_VARS=""
