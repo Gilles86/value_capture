@@ -44,7 +44,7 @@ echo "report_nilearn_glm: sub-${PARTICIPANT_LABEL}  space=${SPACE}  fdr_alpha=${
 echo "Args: ${ARGS[*]}"
 
 . $HOME/init_conda.sh
+conda activate value_capture
+export PYTHONUNBUFFERED=1
 
-conda run -n value_capture python -u \
-    "$REPO/value_capture/glm/report_nilearn_glm.py" \
-    "${ARGS[@]}"
+python -u "$REPO/value_capture/glm/report_nilearn_glm.py" "${ARGS[@]}"

@@ -46,9 +46,8 @@ ARGS=(
 echo "fit_nilearn_glm: sub-${PARTICIPANT_LABEL}  deriv=${FMRIPREP_DERIV}  space=${SPACE}  res=${RES}  smoothing=${SMOOTHING_FWHM}"
 echo "Args: ${ARGS[*]}"
 
-# Load conda environment
 . $HOME/init_conda.sh
+conda activate value_capture
+export PYTHONUNBUFFERED=1
 
-conda run -n value_capture python -u \
-    "$REPO/value_capture/glm/fit_nilearn_glm.py" \
-    "${ARGS[@]}"
+python -u "$REPO/value_capture/glm/fit_nilearn_glm.py" "${ARGS[@]}"

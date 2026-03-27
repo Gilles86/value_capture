@@ -23,9 +23,10 @@ if [ -z "$PARTICIPANT_LABEL" ]; then
 fi
 
 SESSION="${SESSION:-}"
-GM_THRESHOLD="${GM_THRESHOLD:-}"
+GM_THRESHOLD="${GM_THRESHOLD:-0.1}"   # liberal: keeps ~all cortex incl. sulcal depths
 GD_ITERATIONS="${GD_ITERATIONS:-1000}"
 GLMSINGLE_DERIV="${GLMSINGLE_DERIV:-glmsingle}"
+VOXEL_CHUNK_SIZE="${VOXEL_CHUNK_SIZE:-25000}"  # A100 40GB handles 25k voxels easily
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
 REPO=$HOME/git/value_capture
@@ -37,15 +38,19 @@ ARGS=(
     --glmsingle-deriv "$GLMSINGLE_DERIV"
 )
 
-[ -n "$SESSION" ]       && ARGS+=(--sessions $SESSION)
-[ -n "$GM_THRESHOLD" ]  && ARGS+=(--gm-threshold "$GM_THRESHOLD")
+[ -n "$SESSION" ]          && ARGS+=(--sessions $SESSION)
+[ -n "$GM_THRESHOLD" ]     && ARGS+=(--gm-threshold "$GM_THRESHOLD")
+[ -n "$VOXEL_CHUNK_SIZE" ] && ARGS+=(--voxel-chunk-size "$VOXEL_CHUNK_SIZE")
 
 echo "fit_prf: sub-${PARTICIPANT_LABEL}  glmsingle_deriv=${GLMSINGLE_DERIV}  gm_threshold=${GM_THRESHOLD:-none}  gd_iter=${GD_ITERATIONS}"
 echo "Args: ${ARGS[*]}"
 
 . $HOME/init_conda.sh
-module load gpu
+conda activate value_capture
+export PYTHONUNBUFFERED=1
 
-conda run -n value_capture python -u \
-    "$REPO/value_capture/prf/fit_prf.py" \
-    "${ARGS[@]}"
+# jax[cuda12] ships its own CUDA libraries — no module load needed.
+# Print devices so the log confirms GPU is visible.
+python -c "import jax; print('JAX devices:', jax.devices())"
+
+python -u "$REPO/value_capture/prf/fit_prf.py" "${ARGS[@]}"

@@ -39,7 +39,7 @@ echo "fit_second_level: space=${SPACE}  res=${RES}  fdr_alpha=${FDR_ALPHA}  clus
 echo "Args: ${ARGS[*]}"
 
 . $HOME/init_conda.sh
+conda activate value_capture
+export PYTHONUNBUFFERED=1
 
-conda run -n value_capture python -u \
-    "$REPO/value_capture/glm/fit_second_level.py" \
-    "${ARGS[@]}"
+python -u "$REPO/value_capture/glm/fit_second_level.py" "${ARGS[@]}"
