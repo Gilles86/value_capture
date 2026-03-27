@@ -98,7 +98,7 @@ Each `SingletonTrial` has 6 phases (indices used in `draw()` and `get_events()`)
 
 - Raw data: `/data/ds-valuecapture/sourcedata/` (PAR/REC, behavior TSVs)
 - BIDS output: `/data/ds-valuecapture/`
-- Cluster: `ssh sciencecluster` → data at `/shares/zne.uzh/gdehol/ds-valuecapture/`
+- Cluster: `ssh sciencecluster` → repo at `/home/gdehol/git/value_capture`, data at `/shares/zne.uzh/gdehol/ds-valuecapture/`
 - fmriprep container: `/shares/zne.uzh/containers/fmriprep-25.2.5`
 
 **Conversion:** `python value_capture/prepare/convert_raw_mri_data.py <sub> <ses>`
@@ -111,6 +111,27 @@ Each `SingletonTrial` has 6 phases (indices used in `draw()` and `get_events()`)
 - bids_filter.json selects only `rec-NORDIC` bold files
 
 **Sync back:** `bash value_capture/prepare/sync_fmriprep.sh`
+
+## nilearn GLM Analysis
+
+All GLM scripts live in `value_capture/glm/`. To run on the cluster:
+
+```bash
+# On sciencecluster — pull latest and submit the full pipeline
+cd ~/git/value_capture && git pull
+cd value_capture/glm/slurm_jobs
+bash submit_nilearn_glm.sh
+```
+
+This chains three SLURM stages (each waits for the previous):
+1. **First-level** array (subs 01–03): `fit_nilearn_glm.py` — fits per-subject GLMs, saves z/effect maps
+2. **Second-level**: `fit_second_level.py` — one-sample t-test across subjects, saves group maps + PDF report
+3. **Per-subject reports** array: `report_nilearn_glm.py` — FDR-thresholded PDF per subject
+
+Output in `/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/nilearn_glm/`.
+
+**To run Claude Code on the cluster:** `ssh sciencecluster` then use `claude` in the repo dir.
+Claude cannot run compute jobs directly on the login node — use the submit script above.
 
 ## Feedback Logic
 
