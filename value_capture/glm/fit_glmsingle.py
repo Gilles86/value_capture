@@ -224,6 +224,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
         wantfracridge=1,
         wantfileoutputs=[1, 1, 1, 1] if debug else [0, 0, 0, 1],
         sessionindicator=np.array(session_indicators)[np.newaxis, :],
+        numpcstotry=20,
     )
 
     from glmsingle.glmsingle import GLM_single
