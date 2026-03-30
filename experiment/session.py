@@ -365,8 +365,9 @@ class ValueCaptureSession(PylinkEyetrackerSession):
         is_training = self.settings['run'] < 0
         TrialClass = SingletonTrial_training if is_training else SingletonTrial
 
-        rest1 = n_trials // 3
-        rest2 = (2 * n_trials) // 3
+        rest1 = n_trials // 4
+        rest2 = n_trials // 2
+        rest3 = (3 * n_trials) // 4
 
         if is_training:
             # Practice: wait for experimenter key press before starting
@@ -379,7 +380,7 @@ class ValueCaptureSession(PylinkEyetrackerSession):
                 )
             )
             for ix, ((t_loc, d_loc, value_rank, dist_present), (bar_ori, bar_pos)) in enumerate(zip(all_trials, bar_schedule)):
-                if ix in (rest1, rest2):
+                if ix in (rest1, rest2, rest3):
                     self.trials.append(BlankTrial(session=self, trial_nr=ix, duration=20))
                 self.trials.append(
                     TrialClass(
@@ -433,7 +434,7 @@ class ValueCaptureSession(PylinkEyetrackerSession):
             self.trials.append(start_trial)
 
             for ix, ((t_loc, d_loc, value_rank, dist_present), (bar_ori, bar_pos)) in enumerate(zip(all_trials, bar_schedule)):
-                if ix in (rest1, rest2):
+                if ix in (rest1, rest2, rest3):
                     self.trials.append(BlankTrial(session=self, trial_nr=ix, duration=20))
                 self.trials.append(
                     SingletonTrial(
