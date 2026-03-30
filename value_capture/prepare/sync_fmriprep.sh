@@ -57,7 +57,14 @@ $RSYNC \
   --exclude '*' \
   "$SRC" "$DST"
 
-echo "=== Pass 6: T1w anatomicals (NIfTI + .gii) ==="
+echo "=== Pass 6: fmap outputs (field maps, SDC references) ==="
+$RSYNC \
+  --include '*/' \
+  --include 'fmap/**' \
+  --exclude '*' \
+  "$SRC" "$DST"
+
+echo "=== Pass 8: T1w anatomicals (NIfTI + .gii) ==="
 # Note: hemi exclusion deliberately omitted here — all anat .gii surfaces have hemi-L/R in name.
 # func/ excluded entirely to keep this anat-only.
 $RSYNC \

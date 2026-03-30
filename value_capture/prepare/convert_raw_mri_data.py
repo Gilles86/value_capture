@@ -14,6 +14,34 @@ def _log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+def _slice_timing(n_slices=81, mb=3, tr=1.6):
+    """Ascending SMS slice timing: excitation k fires slices k, k+N/MB, k+2*N/MB."""
+    n_exc = n_slices // mb
+    dt = tr / n_exc
+    return [round((i % n_exc) * dt, 9) for i in range(n_slices)]
+
+
+SBREF_JSON = {
+    "Manufacturer": "Philips",
+    "ManufacturersModelName": "Ingenia",
+    "MagneticFieldStrength": 7,
+    "ReceiveCoilName": ["SENSE-Head-7T-Ant", "SENSE-Head-7T-Post"],
+    "FlipAngle": 66,
+    "EchoTime": 0.024,
+    "RepetitionTime": 1.6,
+    "SliceThickness": 1.7,
+    "VoxelSize": [1.68, 1.68, 1.7],
+    "FieldOfView": [215, 215, 137.7],
+    "MultibandAccelerationFactor": 1,
+    "ParallelReductionFactorInPlane": 2.4,
+    "FatSuppressionTechnique": "SPIR",
+    "MRAcquisitionType": "2D",
+    "PulseSequenceType": "EPI",
+    "PartialFourier": 0.796610177,
+    "PhaseEncodingDirection": "j",
+    "TotalReadoutTime": 0.033138,  # 53 / 1599.4 Hz (SBref BW, MB=1)
+}
+
 BOLD_JSON = {
     "Manufacturer": "Philips",
     "ManufacturersModelName": "Ingenia",
@@ -28,11 +56,12 @@ BOLD_JSON = {
     "MultibandAccelerationFactor": 3,
     "ParallelReductionFactorInPlane": 2.4,
     "FatSuppressionTechnique": "SPIR",
-    "MRAcquisitionType": "3D",
+    "MRAcquisitionType": "2D",
     "PulseSequenceType": "EPI",
     "PartialFourier": 0.796610177,
     "PhaseEncodingDirection": "j",
     "TotalReadoutTime": 0.027578312,
+    "SliceTiming": _slice_timing(),
 }
 
 FMAP_JSON = {
@@ -169,7 +198,7 @@ def _convert_func(subject, session, source_dir, target_dir):
         base = func_dir / f"{sub}_{ses}_run-{run}_sbref"
         nii.to_filename(f"{base}.nii.gz")
         with open(f"{base}.json", "w") as f:
-            json.dump(BOLD_JSON, f, indent=2)
+            json.dump(SBREF_JSON, f, indent=2)
         _log(f"  sbref run-{run} done ({time.time()-t:.0f}s)")
 
 

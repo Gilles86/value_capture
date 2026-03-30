@@ -1,0 +1,7 @@
+{
+    "fmap": {"datatype": "fmap", "suffix": "fieldmap"},
+    "bold": {"datatype": "func", "suffix": "bold", "reconstruction": "NORDIC"},
+    "sbref": {"datatype": "func", "suffix": "sbref"},
+    "t2w":  {"datatype": "anat", "suffix": "T2w"},
+    "t1w":  {"datatype": "anat", "suffix": "T1w"}
+}
