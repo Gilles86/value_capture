@@ -41,6 +41,7 @@ os.environ.setdefault('KERAS_BACKEND', 'jax')
 # Parse just this one flag early, before any GPU-touching imports.
 if '--cpu' in os.sys.argv:
     os.environ['CUDA_VISIBLE_DEVICES'] = ''
+    os.environ['JAX_PLATFORM_NAME'] = 'cpu'  # force JAX to CPU (disables Metal/CUDA)
     try:
         import torch
         torch.backends.mps.is_available = lambda: False
@@ -181,7 +182,7 @@ def _get_gm_mask(sub, session, bids_folder, threshold):
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
          gm_threshold=None, gd_iterations=1000, glmsingle_deriv='glmsingle',
-         voxel_chunk_size=5000):
+         voxel_chunk_size=5000, learning_rate=0.01):
 
     sub = Subject(subject, bids_folder=bids_folder)
     if sessions is None:
@@ -276,7 +277,8 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
         chunk_fitter = ParameterFitter(
             model=chunk_model, data=chunk_data, paradigm=paradigm_df)
         pars_chunks.append(
-            chunk_fitter.fit(init_pars=chunk_init, max_n_iterations=gd_iterations))
+            chunk_fitter.fit(init_pars=chunk_init, max_n_iterations=gd_iterations,
+                             learning_rate=learning_rate))
         # free GPU memory between chunks
         del chunk_model, chunk_fitter, chunk_data, chunk_init
         try:
@@ -364,6 +366,8 @@ if __name__ == '__main__':
     parser.add_argument('--voxel-chunk-size', type=int, default=5000,
                         help='Number of voxels per gradient-descent chunk (default: 5000). '
                              'Reduce if GPU runs out of memory; increase for speed on large GPUs.')
+    parser.add_argument('--learning-rate', type=float, default=0.01,
+                        help='Adam learning rate for gradient descent (default: 0.01).')
     args = parser.parse_args()
 
     main(
@@ -374,4 +378,5 @@ if __name__ == '__main__':
         gd_iterations=args.gd_iterations,
         glmsingle_deriv=args.glmsingle_deriv,
         voxel_chunk_size=args.voxel_chunk_size,
+        learning_rate=args.learning_rate,
     )
