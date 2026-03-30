@@ -381,7 +381,7 @@ class ValueCaptureSession(PylinkEyetrackerSession):
             )
             for ix, ((t_loc, d_loc, value_rank, dist_present), (bar_ori, bar_pos)) in enumerate(zip(all_trials, bar_schedule)):
                 if ix in (rest1, rest2, rest3):
-                    self.trials.append(BlankTrial(session=self, trial_nr=ix, duration=12))
+                    self.trials.append(BlankTrial(session=self, trial_nr=ix, duration=15))
                 self.trials.append(
                     TrialClass(
                         self,
@@ -435,7 +435,7 @@ class ValueCaptureSession(PylinkEyetrackerSession):
 
             for ix, ((t_loc, d_loc, value_rank, dist_present), (bar_ori, bar_pos)) in enumerate(zip(all_trials, bar_schedule)):
                 if ix in (rest1, rest2, rest3):
-                    self.trials.append(BlankTrial(session=self, trial_nr=ix, duration=12))
+                    self.trials.append(BlankTrial(session=self, trial_nr=ix, duration=15))
                 self.trials.append(
                     SingletonTrial(
                         self,
