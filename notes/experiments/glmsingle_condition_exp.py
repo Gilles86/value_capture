@@ -219,27 +219,40 @@ def main():
     r2_A    = res_A['typed']['R2']        # (x, y, z)
     r2_B    = res_B['typed']['R2']
 
-    # -- Extract hyperparameters selected by GLMSingle ------------------------
-    # 'pcnum' = number of noise PCs removed; 'FRACvalue' = ridge fraction λ
-    hyperparams = {}
-    for label, res in [('A', res_A), ('B', res_B)]:
-        typed = res['typed']
-        hp = {}
-        for key in ('pcnum', 'FRACvalue', 'noisepool'):
-            if key in typed:
-                val = typed[key]
-                hp[key] = int(val) if np.ndim(val) == 0 else val.tolist()
-        hyperparams[f'cond_{label}'] = hp
-
-    (out_dir / 'hyperparams.json').write_text(json.dumps(hyperparams, indent=2))
-    print('\n--- Hyperparameters ---')
-    print(json.dumps(hyperparams, indent=2))
-
     # -- Save NIfTIs ----------------------------------------------------------
     nib.Nifti1Image(betas_A, ref_img.affine).to_filename(out_dir / 'condA_betas.nii.gz')
     nib.Nifti1Image(betas_B, ref_img.affine).to_filename(out_dir / 'condB_betas.nii.gz')
     nib.Nifti1Image(r2_A,    ref_img.affine).to_filename(out_dir / 'condA_R2.nii.gz')
     nib.Nifti1Image(r2_B,    ref_img.affine).to_filename(out_dir / 'condB_R2.nii.gz')
+
+    # FRACvalue is per-voxel (x,y,z) — save as NIfTI, summarise in JSON
+    for label, res in [('A', res_A), ('B', res_B)]:
+        frac = res['typed'].get('FRACvalue')
+        if frac is not None:
+            nib.Nifti1Image(frac.astype(np.float32), ref_img.affine).to_filename(
+                out_dir / f'cond{label}_FRACvalue.nii.gz')
+
+    # -- Extract scalar hyperparameters for JSON ------------------------------
+    hyperparams = {}
+    for label, res in [('A', res_A), ('B', res_B)]:
+        typed = res['typed']
+        hp = {}
+        # pcnum: scalar — number of noise PCs removed
+        if 'pcnum' in typed:
+            hp['pcnum'] = int(typed['pcnum'])
+        # FRACvalue: per-voxel volume — summarise over brain mask
+        if 'FRACvalue' in typed:
+            frac_masked = typed['FRACvalue'][mask]
+            hp['FRACvalue_mean']   = float(frac_masked.mean())
+            hp['FRACvalue_median'] = float(np.median(frac_masked))
+            hp['FRACvalue_std']    = float(frac_masked.std())
+            hp['FRACvalue_min']    = float(frac_masked.min())
+            hp['FRACvalue_max']    = float(frac_masked.max())
+        hyperparams[f'cond_{label}'] = hp
+
+    (out_dir / 'hyperparams.json').write_text(json.dumps(hyperparams, indent=2))
+    print('\n--- Hyperparameters ---')
+    print(json.dumps(hyperparams, indent=2))
 
     # -- Comparison stats -----------------------------------------------------
     r2_A_masked = r2_A[mask]
