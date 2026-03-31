@@ -53,7 +53,7 @@ RUNS = list(range(1, 9))             # runs 1–8
 
 
 # ---------------------------------------------------------------------------
-# Path helpers (no imports from value_capture)
+# Path helpers
 # ---------------------------------------------------------------------------
 
 def bold_path(run):
@@ -68,12 +68,6 @@ def mask_path(run=1):
             / f'sub-{SUBJECT}' / f'ses-{SESSION}' / 'func'
             / f'sub-{SUBJECT}_ses-{SESSION}_task-valuecapture'
               f'_rec-NORDIC_run-{run}_space-T1w_desc-brain_mask.nii.gz')
-
-
-def events_path(run):
-    return (BIDS / f'sub-{SUBJECT}' / f'ses-{SESSION}' / 'func'
-            / f'sub-{SUBJECT}_ses-{SESSION}_task-valuecapture'
-              f'_run-{run}_events.tsv')
 
 
 # ---------------------------------------------------------------------------
@@ -158,8 +152,12 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # -- Load events and build global condition map --------------------------
+    # Use Subject.get_onsets() — reads sourcedata behavioral TSVs (which include
+    # pulse events) and normalises t=0 to the first scanner pulse.  The BIDS func/
+    # events TSVs have no pulse rows, which breaks the n_removed calculation.
     print('Loading events...')
-    all_events = [pd.read_csv(events_path(r), sep='\t') for r in RUNS]
+    sub = Subject(SUBJECT, bids_folder=str(BIDS))
+    all_events = [sub.get_onsets(SESSION, r) for r in RUNS]
     condition_to_idx = build_condition_index(all_events)
     print(f'  {len(condition_to_idx)} bar conditions')
 
