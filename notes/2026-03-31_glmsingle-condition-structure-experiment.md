@@ -72,31 +72,3 @@ the betas are virtually identical (r > 0.999 at p1, min r = 0.96 across the whol
 More conditions means fewer reps/condition/run, which makes the CV noisier without any benefit
 to the betas. Keep the current 20-condition pipeline.
 
-## Technical notes / bugs fixed along the way
-
-### Events TSV path bug
-
-The experiment script originally read events from the BIDS `func/` events TSVs:
-```
-sub-XX/ses-Y/func/sub-XX_ses-Y_task-valuecapture_run-Z_events.tsv
-```
-These files do **not** contain `event_type == 'pulse'` rows, so `total_pulses = 0` and
-`n_removed = 0 - n_vols = -207`. Every trial onset then mapped to the last clipped volume,
-causing all conditions to collide at the same timepoint → GLMSingle assertion error.
-
-Fix: use `Subject.get_onsets(session, run)` (same as `fit_glmsingle.py`), which reads from
-`sourcedata/behavior/` — the raw behavioral TSVs that do include pulse events — and normalises
-t = 0 to the first scanner pulse.
-
-### n_removed for upsampled TR (upsample experiment)
-
-In `glmsingle_upsample_exp.py`, condition B upsamples the BOLD by 2.5× (TR = 0.64 s).
-The naive `n_removed = total_pulses - n_vols_up` mixes native pulse count (~219) with
-upsampled volume count (518), giving n_removed = −299. This shifts all onsets ~300 volumes
-too high, again causing clipping collisions.
-
-Fix: convert via time —
-```python
-n_vols_native = int(round(n_vols * tr / TR))
-n_removed = int(round((total_pulses - n_vols_native) * TR / tr))
-```
