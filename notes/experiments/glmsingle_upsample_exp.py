@@ -99,7 +99,11 @@ def build_condition_index(all_events):
 def build_design(events, n_vols, tr, condition_to_idx):
     """Return (n_vols × n_conds) design matrix, rounded to given TR."""
     total_pulses = len(events[events['event_type'] == 'pulse'])
-    n_removed = total_pulses - n_vols
+    # n_removed must be in units of tr. total_pulses is in native TR units,
+    # so convert via time: dummy_secs = (total_pulses - n_native_vols) * TR,
+    # then n_removed = dummy_secs / tr.
+    n_vols_native = int(round(n_vols * tr / TR))
+    n_removed = int(round((total_pulses - n_vols_native) * TR / tr))
 
     n_conds = len(condition_to_idx)
     dm = np.zeros((n_vols, n_conds), dtype=np.float32)
