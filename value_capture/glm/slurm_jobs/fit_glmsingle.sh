@@ -4,8 +4,8 @@
 #SBATCH --output=/home/gdehol/logs/fit_glmsingle_%j.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
-#SBATCH --time=04:00:00
+#SBATCH --mem=128G
+#SBATCH --time=08:00:00
 
 # Fit GLMsingle single-trial betas for the value capture fMRI task.
 #
