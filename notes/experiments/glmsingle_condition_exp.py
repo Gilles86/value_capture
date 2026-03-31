@@ -202,7 +202,6 @@ def main():
         wantfracridge=1,
         wantfileoutputs=[0, 0, 0, 0],
         sessionindicator=np.ones((1, len(RUNS)), dtype=int),
-        numpcstotry=20,
     )
 
     print('\n=== Condition A (bar only, 20 conds) ===', flush=True)
