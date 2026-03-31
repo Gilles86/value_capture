@@ -72,12 +72,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from nilearn import image
+from scipy.interpolate import interp1d
 
 from value_capture.utils.data import Subject, BIDS_FOLDER
 
 warnings.filterwarnings('ignore')
 
 TR = 1.6
+UPSAMPLE_FACTOR = 3
+TR_UP = TR / UPSAMPLE_FACTOR   # ≈ 0.533 s
 
 
 def bar_condition_label(row):
@@ -107,14 +110,27 @@ def build_condition_index(all_events):
     return {c: i for i, c in enumerate(sorted(conditions, key=_sort_key))}
 
 
-def build_design_matrix(events, n_vols, condition_to_idx):
+def upsample_bold(bold_4d, factor):
+    """Linearly upsample a (x,y,z,t) array along the time axis by `factor`."""
+    x, y, z, t = bold_4d.shape
+    t_orig = np.arange(t, dtype=np.float64)
+    n_new = int(round(t * factor))
+    t_new = np.linspace(0, t - 1, n_new)
+    flat = bold_4d.reshape(-1, t).astype(np.float32)
+    up = interp1d(t_orig, flat, axis=1, kind='linear',
+                  fill_value='extrapolate', assume_sorted=True)(t_new)
+    return up.reshape(x, y, z, n_new)
+
+
+def build_design_matrix(events, n_vols, condition_to_idx, tr=TR):
     """Return (dm, trial_order, trial_metadata) for one run.
 
     Parameters
     ----------
     events          : DataFrame from Subject.get_onsets()
-    n_vols          : int — volumes in the fmriprep output for this run
+    n_vols          : int — volumes in the (possibly upsampled) BOLD for this run
     condition_to_idx: global {label: column} map from build_condition_index()
+    tr              : float — TR of the (possibly upsampled) data in seconds
 
     Returns
     -------
@@ -123,7 +139,10 @@ def build_design_matrix(events, n_vols, condition_to_idx):
     trial_metadata : list[dict] — per-trial info dicts
     """
     total_pulses = len(events[events['event_type'] == 'pulse'])
-    n_removed = total_pulses - n_vols   # leading TRs fmriprep discarded
+    # Convert to native-TR space first, then back to data-TR space so that
+    # n_removed is in the correct units when tr != TR (e.g. upsampled data).
+    n_vols_native = int(round(n_vols * tr / TR))
+    n_removed = int(round((total_pulses - n_vols_native) * TR / tr))
 
     target_events = events[events['event_type'] == 'target'].sort_values('onset')
 
@@ -133,7 +152,7 @@ def build_design_matrix(events, n_vols, condition_to_idx):
     trial_metadata = []
 
     for _, row in target_events.iterrows():
-        dm_row = int(np.round(row['onset'] / TR)) - n_removed
+        dm_row = int(np.round(row['onset'] / tr)) - n_removed
         dm_row = max(0, min(dm_row, n_vols - 1))
 
         cond = bar_condition_label(row)
@@ -198,11 +217,15 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
             bold_data = img.get_fdata()
             n_vols = bold_data.shape[3]
 
-            dm, trial_order, trial_meta = build_design_matrix(events, n_vols, condition_to_idx)
+            bold_data = upsample_bold(bold_data, UPSAMPLE_FACTOR)
+            n_vols_up = bold_data.shape[3]
+
+            dm, trial_order, trial_meta = build_design_matrix(
+                events, n_vols_up, condition_to_idx, tr=TR_UP)
 
             total_pulses = len(events[events['event_type'] == 'pulse'])
             n_removed = total_pulses - n_vols
-            print(f'    run-{run}: {n_vols} vols (removed {n_removed}), '
+            print(f'    run-{run}: {n_vols} vols → {n_vols_up} upsampled (removed {n_removed}), '
                   f'{len(trial_order)} trials, dm shape {dm.shape}')
 
             data.append(bold_data)
@@ -228,7 +251,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
     )
 
     from glmsingle.glmsingle import GLM_single
-    results = GLM_single(opt).fit(X, data, TR, TR,
+    results = GLM_single(opt).fit(X, data, TR, TR_UP,
                                   outputdir=str(out_dir),
                                   figuredir=str(fig_dir))
 
