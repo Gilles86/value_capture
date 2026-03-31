@@ -8,8 +8,10 @@
 #SBATCH --mem=128G
 #SBATCH --time=12:00:00
 
-export PYTHONUNBUFFERED=1
-export OMP_NUM_THREADS=16
+REPO=$HOME/git/value_capture
 
-$HOME/.conda/envs/value_capture/bin/python -u \
-    /home/gdehol/git/value_capture/notes/experiments/glmsingle_condition_exp.py
+. $HOME/init_conda.sh
+conda activate value_capture
+export PYTHONUNBUFFERED=1
+
+python -u "$REPO/notes/experiments/glmsingle_condition_exp.py"

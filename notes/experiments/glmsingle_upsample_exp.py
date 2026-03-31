@@ -38,6 +38,8 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 
+from value_capture.utils.data import Subject
+
 BIDS = Path('/shares/zne.uzh/gdehol/ds-valuecapture')
 # Subject from SLURM array task ID (1→'01', 2→'02', ...) or first CLI arg
 _task_id = os.environ.get('SLURM_ARRAY_TASK_ID') or (sys.argv[1] if len(sys.argv) > 1 else '1')
