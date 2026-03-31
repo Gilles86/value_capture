@@ -48,6 +48,8 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 
+from value_capture.utils.data import Subject
+
 BIDS = Path('/shares/zne.uzh/gdehol/ds-valuecapture')
 _task_id = os.environ.get('SLURM_ARRAY_TASK_ID') or (sys.argv[1] if len(sys.argv) > 1 else '1')
 SUBJECT = f'{int(_task_id):02d}'
@@ -73,12 +75,6 @@ def mask_path(run=1):
             / f'sub-{SUBJECT}' / f'ses-{SESSION}' / 'func'
             / f'sub-{SUBJECT}_ses-{SESSION}_task-valuecapture'
               f'_rec-NORDIC_run-{run}_space-T1w_desc-brain_mask.nii.gz')
-
-
-def events_path(run):
-    return (BIDS / f'sub-{SUBJECT}' / f'ses-{SESSION}' / 'func'
-            / f'sub-{SUBJECT}_ses-{SESSION}_task-valuecapture'
-              f'_run-{run}_events.tsv')
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +153,8 @@ def main():
 
     # -- Load events ---------------------------------------------------------
     print('Loading events...')
-    all_events = [pd.read_csv(events_path(r), sep='\t') for r in RUNS]
+    sub = Subject(SUBJECT, bids_folder=str(BIDS))
+    all_events = [sub.get_onsets(SESSION, r) for r in RUNS]
 
     cond_A = build_condition_index(all_events, bar_condition_label)
     cond_B = build_condition_index(all_events, combined_condition_label)
