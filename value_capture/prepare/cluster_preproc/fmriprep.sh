@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 #SBATCH --job-name=fmriprep_valuecapture
 #SBATCH --account=zne.uzh
 #SBATCH --output=/home/gdehol/logs/valuecapture_fmriprep_%A-%a.txt
@@ -7,8 +7,6 @@
 #SBATCH --mem=128G
 #SBATCH --time=36:00:00
 
-source /etc/profile.d/lmod.sh
-source /etc/profile.d/z01_lmodenv.sh
 module load apptainer/1.4.1
 
 export APPTAINERENV_FS_LICENSE=$HOME/freesurfer/license.txt
