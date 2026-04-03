@@ -8,7 +8,8 @@
 #SBATCH --time=36:00:00
 
 source /etc/profile.d/lmod.sh
-module load apptainer
+source /etc/profile.d/z01_lmodenv.sh
+module load apptainer/1.4.1
 
 export APPTAINERENV_FS_LICENSE=$HOME/freesurfer/license.txt
 export PARTICIPANT_LABEL=$(printf "%02d" $SLURM_ARRAY_TASK_ID)
