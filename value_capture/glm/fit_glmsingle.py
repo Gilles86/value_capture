@@ -79,8 +79,8 @@ from value_capture.utils.data import Subject, BIDS_FOLDER
 warnings.filterwarnings('ignore')
 
 TR = 1.6
-UPSAMPLE_FACTOR = 3
-TR_UP = TR / UPSAMPLE_FACTOR   # ≈ 0.533 s
+UPSAMPLE_FACTOR = 2
+TR_UP = TR / UPSAMPLE_FACTOR   # = 0.8 s
 
 
 def bar_condition_label(row):
