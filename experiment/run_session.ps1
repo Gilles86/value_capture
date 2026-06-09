@@ -44,7 +44,7 @@ Write-Host ""
 if ($DoCalib) {
     Write-Host ">>> Starting DeepMREye calibration (run 1)..."
     Set-Location $DeepMREyeDir
-    python deepmreye_calib.py --subject $Subject --run 1
+    python deepmreye_calib.py $Subject $Session --settings settings_spinoza.yml
     Write-Host ""
     Write-Host ">>> Calibration complete."
     Read-Host "Press Enter to start the task runs"
@@ -78,7 +78,7 @@ if ($DoCalib) {
     if ($CalibEnd -match '^[Yy]$') {
         Write-Host ">>> Starting DeepMREye calibration (run 2)..."
         Set-Location $DeepMREyeDir
-        python deepmreye_calib.py --subject $Subject --run 2
+        python deepmreye_calib.py $Subject $Session --settings settings_spinoza.yml
         Write-Host ">>> End-of-session calibration complete."
     }
 }

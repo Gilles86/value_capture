@@ -44,7 +44,7 @@ echo ""
 if $DoCalib; then
     echo ">>> Starting DeepMREye calibration (run 1)..."
     cd "$DEEPMREYE_DIR"
-    python deepmreye_calib.py --subject "$Subject" --run 1
+    python deepmreye_calib.py "$Subject" "$Session" --settings settings_spinoza.yml
     echo ""
     echo ">>> Calibration complete."
     read -rp "Press Enter to start the task runs"
@@ -78,7 +78,7 @@ if $DoCalib; then
     if [[ "$CalibEnd" =~ ^[Yy]$ ]]; then
         echo ">>> Starting DeepMREye calibration (run 2)..."
         cd "$DEEPMREYE_DIR"
-        python deepmreye_calib.py --subject "$Subject" --run 2
+        python deepmreye_calib.py "$Subject" "$Session" --settings settings_spinoza.yml
         echo ">>> End-of-session calibration complete."
     fi
 fi
