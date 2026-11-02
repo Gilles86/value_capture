@@ -10,10 +10,10 @@
 # Fit GLMsingle single-trial betas for the value capture fMRI task.
 #
 # Usage:
-#   sbatch --export=PARTICIPANT_LABEL=01 fit_glmsingle.sh
-#   sbatch --export=PARTICIPANT_LABEL=01,SESSION=2 fit_glmsingle.sh
+#   PARTICIPANT_LABEL=01 sbatch fit_glmsingle.sh
+#   PARTICIPANT_LABEL=01 SESSION=2 sbatch fit_glmsingle.sh
 #
-# Optional overrides (--export key=value):
+# Optional overrides (set as KEY=value in front of sbatch):
 #   SESSION         session number(s), space-separated (default: all sessions)
 #   FMRIPREP_DERIV  fmriprep derivative label (default: fmriprep)
 #   DEBUG           set to "1" to write all 4 model steps + figures (default: off)

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 #SBATCH --job-name=nordic
 #SBATCH --output=/home/gdehol/logs/nordic_%j.log
 #SBATCH --ntasks=32
@@ -30,7 +30,7 @@ if [ -z "$SUBJECT" ] || [ -z "$RUN" ]; then
     exit 1
 fi
 
-# NORDIC_DIR is passed via --export=ALL,NORDIC_DIR=... at submission time
+# NORDIC_DIR is passed in sbatch's environment (NORDIC_DIR=... sbatch ...) at submission time
 if [ -z "$SESSION" ]; then
     MATLAB_CMD="addpath('${NORDIC_DIR}'); run_nordic('$SUBJECT', $RUN, '$BASE_PATH', [], '$TASK'); exit"
 else

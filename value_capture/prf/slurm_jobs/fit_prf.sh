@@ -12,9 +12,9 @@
 # Fit GaussianPRF2D model to GLMsingle single-trial betas.
 #
 # Usage:
-#   sbatch --export=PARTICIPANT_LABEL=01 fit_prf.sh
-#   sbatch --export=PARTICIPANT_LABEL=01,SESSION=2 fit_prf.sh
-#   sbatch --export=PARTICIPANT_LABEL=01,GM_THRESHOLD=0.5 fit_prf.sh
+#   PARTICIPANT_LABEL=01 sbatch fit_prf.sh
+#   PARTICIPANT_LABEL=01 SESSION=2 sbatch fit_prf.sh
+#   PARTICIPANT_LABEL=01 GM_THRESHOLD=0.5 sbatch fit_prf.sh
 #
 # Run as a SLURM array (one job per subject) by omitting PARTICIPANT_LABEL:
 #   sbatch --array=1-2 fit_prf.sh

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 #SBATCH --job-name=install_jax_cuda
 #SBATCH --output=/home/gdehol/logs/install_jax_cuda_%j.txt
 #SBATCH --ntasks=1

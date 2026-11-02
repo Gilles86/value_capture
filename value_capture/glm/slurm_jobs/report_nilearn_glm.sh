@@ -11,9 +11,9 @@
 #
 # Usage:
 #   sbatch --array=1-3 report_nilearn_glm.sh
-#   sbatch --export=PARTICIPANT_LABEL=01 report_nilearn_glm.sh
+#   PARTICIPANT_LABEL=01 sbatch report_nilearn_glm.sh
 #
-# Optional overrides (--export key=value):
+# Optional overrides (set as KEY=value in front of sbatch):
 #   SPACE             BIDS space entity (default: T1w)
 #   RES               BIDS res entity (default: none)
 #   FDR_ALPHA         FDR significance level (default: 0.05)

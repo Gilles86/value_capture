@@ -13,7 +13,7 @@
 # Usage:
 #   sbatch fit_second_level.sh
 #
-# Optional overrides (--export key=value):
+# Optional overrides (set as KEY=value in front of sbatch):
 #   SPACE             BIDS space entity (default: MNI152NLin2009cAsym)
 #   RES               BIDS res entity (default: 2)
 #   FDR_ALPHA         FDR significance level (default: 0.05)
