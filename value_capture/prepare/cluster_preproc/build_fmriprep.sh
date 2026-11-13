@@ -1,5 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=build_fmriprep
+#SBATCH --account=zne.uzh
 #SBATCH --output=/home/gdehol/logs/build_fmriprep_%A.log
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -8,4 +9,9 @@
 
 source /etc/profile.d/lmod.sh
 module load apptainer/1.4.1
-apptainer build --sandbox /shares/zne.uzh/containers/fmriprep-25.2.5 docker://nipreps/fmriprep:25.2.5
+# Usage: FMRIPREP_VERSION=25.2.7 sbatch build_fmriprep.sh
+VERSION=${FMRIPREP_VERSION:-25.2.7}
+OUT=/shares/zne.uzh/containers/fmriprep-${VERSION}
+set -e
+apptainer build --sandbox "$OUT" docker://nipreps/fmriprep:${VERSION}
+touch "$OUT/.build_done"   # fmriprep.sh waits for this marker

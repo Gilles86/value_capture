@@ -9,6 +9,14 @@
 
 module load apptainer/1.4.1
 
+# fmriprep container version. 25.2.7 for the full cohort (sub-04+ onward);
+# sub-01..03 were originally run with 25.2.5.
+FMRIPREP_VERSION=${FMRIPREP_VERSION:-25.2.7}
+CONTAINER=/shares/zne.uzh/containers/fmriprep-${FMRIPREP_VERSION}
+# If the container is still being built (build_fmriprep.sh), wait up to 12 h.
+for i in $(seq 144); do [ -f "$CONTAINER/.build_done" ] && break; echo "waiting for $CONTAINER"; sleep 300; done
+[ -f "$CONTAINER/.build_done" ] || { echo "no built container at $CONTAINER"; exit 1; }
+
 export APPTAINERENV_FS_LICENSE=$HOME/freesurfer/license.txt
 export PARTICIPANT_LABEL=${PARTICIPANT_LABEL:-$(printf "%02d" $SLURM_ARRAY_TASK_ID)}
 
@@ -26,7 +34,7 @@ apptainer run \
   -B /shares/zne.uzh/gdehol/ds-valuecapture:/data \
   -B ${WORKDIR}:/workflow \
   -B ${PWD}:/bids_input \
-  --cleanenv /shares/zne.uzh/containers/fmriprep-25.2.5 \
+  --cleanenv "$CONTAINER" \
     /data ${OUTDIR} participant \
   --participant_label $PARTICIPANT_LABEL \
   --output-spaces T1w MNI152NLin2009cAsym:res-2 fsnative \
