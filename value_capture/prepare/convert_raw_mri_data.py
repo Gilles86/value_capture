@@ -288,10 +288,40 @@ def _convert_behavior(subject, session, bids_dir, target_dir):
             continue
         run = int(run_match.group(1))
 
+        if run < 1:  # negative runs are practice outside the scanner
+            continue
         for events_file in run_dir.glob("*_events.tsv"):
             dest = func_dir / f"sub-{subject:02d}_ses-{session}_task-valuecapture_run-{run}_events.tsv"
-            shutil.copy2(events_file, dest)
-            _log(f"  {events_file.name} → {dest.name}")
+            n = _write_bids_events(events_file, dest)
+            _log(f"  {events_file.name} → {dest.name} ({n} events)")
+
+
+def _write_bids_events(src, dest):
+    """Raw exptools2 log -> BIDS events.tsv.
+
+    - onset relative to the first scanner pulse (= acquisition volume 0; same
+      convention as Subject.get_onsets, which the GLMs use)
+    - trial_type = exptools2 event_type (trial_start, pre_target, target,
+      response, iti1, feedback, iti2, ...); scanner 'pulse' rows are dropped
+    - duration from the log; responses get duration 0
+    - all trial parameters kept as extra columns; empty cells -> n/a
+    """
+    import pandas as pd
+    df = pd.read_csv(src, sep="\t")
+    pulses = df.loc[df["event_type"] == "pulse", "onset"]
+    if len(pulses) == 0:
+        raise ValueError(f"No scanner pulses in {src}")
+    df["onset"] = df["onset"] - pulses.min()
+    df = df[(df["event_type"] != "pulse") & (df["onset"] >= 0)].copy()
+    df = df.rename(columns={"event_type": "trial_type"})
+    df.loc[df["trial_type"] == "response", "duration"] = 0.0
+    df = df.drop(columns=["onset_abs", "nr_frames"], errors="ignore")
+    first = ["onset", "duration", "trial_type"]
+    df = df[first + [c for c in df.columns if c not in first]]
+    df["onset"] = df["onset"].round(4)
+    df["duration"] = df["duration"].round(4)
+    df.to_csv(dest, sep="\t", index=False, na_rep="n/a")
+    return len(df)
 
 
 if __name__ == "__main__":
