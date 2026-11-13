@@ -9,6 +9,7 @@ import argparse
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from scipy import stats
 
 from value_capture.utils.data import get_all_behavioral_data
 
@@ -23,7 +24,8 @@ def main(bids_folder, out):
     # independent of the main sample (see participants.tsv)
     df = df[~df['subject'].isin(['01', '02', '03'])]
     df = df[df['condition'].isin(ORDER)]
-    df['condition'] = pd.Categorical(df['condition'], ORDER, ordered=True)
+    df['condition'] = pd.Categorical(df['condition'].astype(str), ORDER, ordered=True)
+    df['correct'] = df['correct'].astype(float)
     df['rt_ms'] = df['rt'] * 1000
     correct = df[df['correct'] == 1]
 
@@ -51,6 +53,20 @@ def main(bids_folder, out):
         ax.tick_params(axis='x', rotation=30)
         if y == 'rt_capture':
             ax.axhline(0, color='k', lw=0.6, ls='--')
+    # Paired t-tests across subjects
+    w = rt.pivot(index='subject', columns='condition', values='rt_ms')
+    def _p(a, b):
+        t = stats.ttest_rel(w[a], w[b])
+        return f't({len(w) - 1}) = {t.statistic:.2f}, p = {t.pvalue:.3f}'
+    lines = [f'Low vs none: {_p("Low Value", "No Distractor")}',
+             f'High vs none: {_p("High Value", "No Distractor")}',
+             f'High vs low: {_p("High Value", "Low Value")}']
+    axes[1].text(0.02, 0.98, '\n'.join(lines), transform=axes[1].transAxes,
+                 va='top', fontsize=7)
+    wa = acc.pivot(index='subject', columns='condition', values='correct')
+    t = stats.ttest_rel(wa['High Value'], wa['Low Value'])
+    axes[2].text(0.02, 0.02, f'High vs low: t({len(wa) - 1}) = {t.statistic:.2f}, p = {t.pvalue:.3f}',
+                 transform=axes[2].transAxes, fontsize=7)
     sns.despine(fig)
     fig.suptitle(f'Value-driven capture, main study N = {n} (grey: subjects; dots: mean ± 95% CI)',
                  fontsize=10)
