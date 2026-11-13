@@ -1,7 +1,14 @@
-"""Shareable behaviour figure (main study): RT capture and accuracy by distractor value.
+"""Shareable behaviour figure (main study), in the retsupp paper-figure style.
+
+a, response time per condition: subject dots (no connecting lines), mean ± within-subject SEM
+   (Cousineau-Morey), brackets with the mean within-subject difference and one-sided p.
+b, within-subject differences as horizontal strips: subject dots, mean (diamond) with its
+   bootstrapped 95% CI, count of subjects in the predicted direction.
+c, accuracy, as a.
 
     python value_capture/behavior/plot_behavior_share.py
 Reads notes/data/behavior_trials_main.tsv (from fit_logrt_bambi.py export).
+One-sided tests: directional predictions (distractors cost, high value more than low).
 """
 from pathlib import Path
 
@@ -9,79 +16,127 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from scipy import stats
 
 ROOT = Path(__file__).resolve().parents[2]
 mpl.rcParams.update({
-    'font.family': 'Helvetica', 'font.size': 7, 'axes.labelsize': 8, 'axes.titlesize': 8,
-    'xtick.labelsize': 7, 'ytick.labelsize': 7, 'axes.linewidth': .8,
-    'axes.spines.top': False, 'axes.spines.right': False,
-    'xtick.direction': 'out', 'ytick.direction': 'out', 'xtick.major.size': 3,
-    'ytick.major.size': 3, 'xtick.major.width': .8, 'ytick.major.width': .8,
-    'pdf.fonttype': 42, 'savefig.dpi': 300, 'savefig.bbox': 'tight', 'savefig.pad_inches': .02})
-
+    'font.family': 'Helvetica', 'font.size': 7, 'axes.labelsize': 7.5, 'xtick.labelsize': 7,
+    'ytick.labelsize': 7, 'axes.linewidth': .8, 'axes.spines.top': False, 'axes.spines.right': False,
+    'xtick.direction': 'out', 'ytick.direction': 'out', 'xtick.major.size': 3, 'ytick.major.size': 3,
+    'xtick.major.width': .8, 'ytick.major.width': .8, 'pdf.fonttype': 42, 'savefig.dpi': 300,
+    'savefig.bbox': 'tight', 'savefig.pad_inches': .03})
+FG, MUTED = '#1F2933', '#9AA5B1'
+COL = {'none': MUTED, 'low': '#4A7FB5', 'high': '#B2182B'}
+LAB = {'none': 'Absent', 'low': 'Low', 'high': 'High'}
 ORDER = ['none', 'low', 'high']
-LABELS = {'none': 'No\ndistractor', 'low': 'Low-value\ndistractor', 'high': 'High-value\ndistractor'}
-PAL = {'none': '#9C9C9C', 'low': '#3B5BA5', 'high': '#C44E52'}
+
+
+def stars(p):
+    return '***' if p < .001 else '**' if p < .01 else '*' if p < .05 else f'p = {p:.2f}'.replace('0.', '.')
+
+
+def ws_sem(w):
+    k = w.shape[1]
+    return (w.sub(w.mean(1), axis=0) + w.values.mean()).sem() * np.sqrt(k / (k - 1))
+
+
+def cond_panel(ax, w, ylim, yticks, pairs, unit, seed=3):
+    lo, hi = ylim
+    m, se = w.mean(), ws_sem(w)
+    rng = np.random.default_rng(seed)
+    for i, c in enumerate(ORDER):
+        v = w[c].to_numpy()
+        xx = i + rng.uniform(-.14, .14, len(v))
+        ok, over, under = (v >= lo) & (v <= hi), v > hi, v < lo
+        ax.scatter(xx[ok], v[ok], s=9, color=COL[c], alpha=.35, lw=0, zorder=1)
+        ax.scatter(xx[over], np.full(over.sum(), hi), s=10, marker='^', color=COL[c], alpha=.6, lw=0, clip_on=False)
+        ax.scatter(xx[under], np.full(under.sum(), lo), s=10, marker='v', color=COL[c], alpha=.6, lw=0, clip_on=False)
+        ax.errorbar(i, m[c], se[c], color=COL[c], marker='o', ms=6, mec='w', mew=.7, lw=1.4, capsize=0, zorder=4)
+    ax.plot(range(3), m.values, color=FG, lw=.8, zorder=3)
+    span = hi - lo
+    for n, (a, b, alt) in enumerate(pairs):
+        d = w[a] - w[b]
+        p = stats.ttest_1samp(d, 0, alternative=alt).pvalue
+        i, j = ORDER.index(a), ORDER.index(b)
+        y = hi + (.12 + n * .14) * span
+        ax.plot([min(i, j), max(i, j)], [y, y], color=FG, lw=.7, clip_on=False)
+        ax.text((i + j) / 2, y + .01 * span, f'{d.mean():+.{1 if unit == "%" else 0}f} {unit} {stars(p)}'.replace('-', '−'),
+                ha='center', va='bottom', fontsize=6.5, color=FG, clip_on=False)
+    ax.set_xticks(range(3), [LAB[c] for c in ORDER])
+    ax.set_xlabel('Distractor value', labelpad=2)
+    ax.set_xlim(-.45, 2.45)
+    ax.set_ylim(lo, hi)
+    ax.set_yticks(yticks)
+    for s in ('left', 'bottom'):
+        ax.spines[s].set_position(('outward', 4))
+
+
+def strip(ax, d, color, label, lim, word, alt, seed=0):
+    v = np.asarray(d, float)
+    rng = np.random.default_rng(seed)
+    boots = rng.choice(v, (10000, len(v))).mean(1)
+    m, (clo, chi) = v.mean(), np.percentile(boots, [2.5, 97.5])
+    p = stats.ttest_1samp(v, 0, alternative=alt).pvalue
+    yy = rng.uniform(-.32, .32, len(v))
+    ax.axvline(0, color='.75', lw=.6, zorder=0)
+    ax.scatter(np.clip(v, *lim), yy, s=7, color=color, alpha=.45, lw=0, zorder=2, clip_on=False)
+    ax.plot([clo, chi], [0, 0], color=FG, lw=1.4, solid_capstyle='butt', zorder=3)
+    ax.plot(m, 0, 'D', ms=4.2, color=color, mec=FG, mew=.8, zorder=4)
+    good = (v > 0) if alt == 'greater' else (v < 0)
+    ax.text(0, 1.15, f'{label}  {stars(p)}', transform=ax.transAxes, fontsize=6.3, color=FG, va='bottom')
+    ax.text(1, 1.15, f'{good.sum()}/{len(v)} {word}', transform=ax.transAxes, fontsize=6.3, color=FG,
+            ha='right', va='bottom')
+    ax.set_xlim(*lim)
+    ax.set_ylim(-.5, .5)
+    ax.set_yticks([])
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_position(('outward', 2))
+
 
 df = pd.read_csv(ROOT / 'notes/data/behavior_trials_main.tsv', sep='\t', dtype={'subject': str})
-df['correct'] = df['correct'].map({True: 1., False: 0., 'True': 1., 'False': 0.})  # n/a = no response
+df['correct'] = df['correct'].map({True: 1., False: 0., 'True': 1., 'False': 0.})
 n = df.subject.nunique()
 rt = (df[df.correct == 1].groupby(['subject', 'cond']).rt.mean() * 1000).unstack()[ORDER]
 acc = (df.groupby(['subject', 'cond']).correct.mean() * 100).unstack()[ORDER]
-cap = rt[['low', 'high']].sub(rt['none'], axis=0)
 
+W, H = 7.09, 2.35
+fig = plt.figure(figsize=(W, H))
+at = lambda x, y, w, h: fig.add_axes([x / W, y / H, w / W, h / H])  # noqa: E731 (inches)
+Y0, PH = .45, 1.25
 
-def ptxt(a, b, alternative='greater'):
-    # One-sided: directional predictions (distractors slow RT / cost accuracy,
-    # high value more than low; e.g. Anderson et al. 2011, Le Pelley et al. 2016)
-    p = stats.ttest_rel(a, b, alternative=alternative).pvalue
-    return 'p < .001' if p < .001 else f'p = {p:.3f}'.replace('0.', '.')
+ax_a = at(.45, Y0, 1.45, PH)
+cond_panel(ax_a, rt, (700, 1050), [700, 800, 900, 1000],
+           [('low', 'none', 'greater'), ('high', 'none', 'greater'), ('high', 'low', 'greater')], 'ms')
+ax_a.set_ylabel('Response time (ms)')
 
+x0, SW, SH = 2.55, 1.55, .2
+for k, (lab, d, c, word, alt) in enumerate([
+        ('Low − absent', rt.low - rt.none, COL['low'], 'slower', 'greater'),
+        ('High − absent', rt.high - rt.none, COL['high'], 'slower', 'greater'),
+        ('High − low', rt.high - rt.low, COL['high'], 'slower', 'greater')]):
+    s = at(x0, Y0 + PH - .3 - k * .5, SW, SH)
+    strip(s, d, c, lab, (-60, 110), word, alt, seed=k)
+    s.set_xticks([-50, 0, 50, 100])
+    if k < 2:
+        s.set_xticklabels([])
+    else:
+        s.set_xlabel('RT difference (ms)', labelpad=1)
+fig.text((x0 + SW / 2) / W, (Y0 + PH + .12) / H, 'Within subject', fontsize=6.5, color='.4', ha='center')
 
-def panel(ax, w, ylabel, cols):
-    x = np.arange(len(cols))
-    for _, row in w[cols].iterrows():
-        ax.plot(x, row.values, color='0.82', lw=.6, zorder=1)
-    m, se = w[cols].mean(), w[cols].sem()
-    for i, c in enumerate(cols):
-        ax.errorbar(i, m[c], se[c], fmt='o', color=PAL[c], ms=5, lw=1.2, capsize=0, zorder=3,
-                    mec='k', mew=.6)
-    ax.set_xticks(x, [LABELS[c] for c in cols])
-    ax.set_xlim(-.4, len(cols) - .6)
-    ax.set_ylabel(ylabel)
+ax_c = at(4.75, Y0, 1.45, PH)
+cond_panel(ax_c, acc, (85, 100), [85, 90, 95, 100],
+           [('low', 'none', 'less'), ('high', 'none', 'less'), ('high', 'low', 'less')], '%')
+ax_c.set_ylabel('Accuracy (% correct)')
 
-
-def bracket(ax, i, j, y, txt, dy):
-    ax.plot([i, i, j, j], [y - dy, y, y, y - dy], color='0.2', lw=.7)
-    ax.text((i + j) / 2, y + dy * .4, txt, ha='center', va='bottom', fontsize=6.5)
-
-
-fig, axes = plt.subplots(1, 3, figsize=(7.0, 2.4), constrained_layout=True,
-                         gridspec_kw=dict(width_ratios=[1.2, .9, 1.2]))
-ax = axes[0]
-panel(ax, rt, 'RT, correct trials (ms)', ORDER)
-ax.set_ylim(650, 1200)
-bracket(ax, 0, 1, 1110, ptxt(rt.low, rt.none), 12)
-bracket(ax, 0, 2, 1165, ptxt(rt.high, rt.none), 12)
-
-ax = axes[1]
-panel(ax, cap, 'Capture: RT − no-distractor RT (ms)', ['low', 'high'])
-ax.axhline(0, color='0.7', lw=.6, ls='--', zorder=0)
-ax.set_ylim(-50, 125)
-bracket(ax, 0, 1, 108, f'Value: {ptxt(cap.high, cap.low)}', 5)
-
-ax = axes[2]
-panel(ax, acc, 'Accuracy (% correct)', ORDER)
-ax.set_ylim(86, 100.5)
-bracket(ax, 1, 2, 98.8, ptxt(acc.high, acc.low, 'less'), .35)
-
-for a, l in zip(axes, 'abc'):
-    a.text(-.22, 1.04, l, transform=a.transAxes, fontsize=8, weight='bold', ha='right', va='bottom')
-fig.suptitle(f'Colour singletons capture attention; high value costs accuracy  (N = {n}; one-sided paired t-tests)',
-             fontsize=8, x=.02, ha='left')
-sns.despine(fig=fig, offset=5, trim=True)
+for a, l, x in ((ax_a, 'a', -.42), (ax_c, 'c', -.42)):
+    a.text(x, 1.45, l, transform=a.transAxes, fontsize=8, weight='bold', va='bottom')
+fig.text((x0 - .25) / W, (Y0 + PH + .12) / H + .0, 'b', fontsize=8, weight='bold')
 out = ROOT / 'notes/figures/behavior_share'
-fig.savefig(f'{out}.pdf'); fig.savefig(f'{out}.png', dpi=300)
-print(out, '\n', rt.mean().round(1).to_dict(), cap.mean().round(1).to_dict(), acc.mean().round(2).to_dict())
+fig.savefig(f'{out}.pdf')
+fig.savefig(f'{out}.png', dpi=300)
+print(f"""Caption: Value-driven capture, main study (n = {n}, sub-04–15). a, Response time on correct trials when the
+colour-singleton distractor signalled low or high reward, or no distractor was present. Dots: subjects (triangles:
+beyond the axis); large points and bars: mean ± within-subject SEM (Cousineau–Morey). Brackets: mean within-subject
+difference, one-sided paired t-test (distractor slower; high slower than low; * p < .05, ** p < .01, *** p < .001).
+b, Within-subject RT differences: dots subjects, diamond mean, bar bootstrapped 95% CI; counts: subjects in the
+predicted direction. c, Accuracy, as a (one-sided: distractor and high value lower).""")
