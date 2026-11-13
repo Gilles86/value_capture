@@ -51,13 +51,13 @@ def fit(draws, tune):
     results = {}
     m = bmb.Model('log_rt ~ cond * session_c + orange + (cond + session_c | subject)', rt)
     results['logrt'] = m.fit(draws=draws, tune=tune, chains=4, target_accept=.95,
-                             cores=4, random_seed=1)
+                             cores=1, random_seed=1)
     acc = df[df['correct'].notna()].copy()
     acc['correct'] = acc['correct'].astype(int)
     m_acc = bmb.Model('correct ~ cond * session_c + orange + (cond | subject)', acc,
                       family='bernoulli')
     results['acc'] = m_acc.fit(draws=draws, tune=tune, chains=4, target_accept=.95,
-                               cores=4, random_seed=1)
+                               cores=1, random_seed=1)
 
     rows = []
     for name, idata in results.items():

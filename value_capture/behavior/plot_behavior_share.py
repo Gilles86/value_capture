@@ -33,8 +33,10 @@ acc = (df.groupby(['subject', 'cond']).correct.mean() * 100).unstack()[ORDER]
 cap = rt[['low', 'high']].sub(rt['none'], axis=0)
 
 
-def ptxt(a, b):
-    p = stats.ttest_rel(a, b).pvalue
+def ptxt(a, b, alternative='greater'):
+    # One-sided: directional predictions (distractors slow RT / cost accuracy,
+    # high value more than low; e.g. Anderson et al. 2011, Le Pelley et al. 2016)
+    p = stats.ttest_rel(a, b, alternative=alternative).pvalue
     return 'p < .001' if p < .001 else f'p = {p:.3f}'.replace('0.', '.')
 
 
@@ -73,11 +75,11 @@ bracket(ax, 0, 1, 108, f'Value: {ptxt(cap.high, cap.low)}', 5)
 ax = axes[2]
 panel(ax, acc, 'Accuracy (% correct)', ORDER)
 ax.set_ylim(86, 100.5)
-bracket(ax, 1, 2, 98.8, ptxt(acc.high, acc.low), .35)
+bracket(ax, 1, 2, 98.8, ptxt(acc.high, acc.low, 'less'), .35)
 
 for a, l in zip(axes, 'abc'):
     a.text(-.22, 1.04, l, transform=a.transAxes, fontsize=8, weight='bold', ha='right', va='bottom')
-fig.suptitle(f'Colour singletons capture attention; reward value adds little  (N = {n})',
+fig.suptitle(f'Colour singletons capture attention; high value costs accuracy  (N = {n}; one-sided paired t-tests)',
              fontsize=8, x=.02, ha='left')
 sns.despine(fig=fig, offset=5, trim=True)
 out = ROOT / 'notes/figures/behavior_share'
