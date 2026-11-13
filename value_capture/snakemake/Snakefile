@@ -24,7 +24,7 @@ SESSIONS = [int(s) for s in config["sessions"]]
 RUNS = list(range(1, int(config["n_runs"]) + 1))
 REPO = os.path.abspath(".")
 PREP = f"{REPO}/value_capture/prepare"
-CONDA = ". $HOME/init_conda.sh && conda activate value_capture && export PYTHONUNBUFFERED=1"
+CONDA = "source $HOME/data/miniforge3/etc/profile.d/conda.sh && conda activate value_capture && export PYTHONUNBUFFERED=1"
 
 wildcard_constraints:
     sub=r"\d{2}",
