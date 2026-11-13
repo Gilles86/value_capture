@@ -188,9 +188,8 @@ def main(subjects=None, bids_folder=BIDS_FOLDER, space='MNI152NLin2009cAsym',
                 else:
                     missing.append(sub)
 
-            if missing:
-                print(f'  {name}: missing subjects {missing}, skipping')
-                continue
+            if missing:  # e.g. medium-value contrasts exist only for pilot sub-01..03
+                print(f'  {name}: missing subjects {missing}, using the other {len(effect_imgs)}')
             if len(effect_imgs) < 2:
                 print(f'  {name}: need ≥2 subjects, got {len(effect_imgs)}, skipping')
                 continue

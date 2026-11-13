@@ -256,7 +256,21 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
     print(f'\nDesign matrix plot → {dm_path.name}')
 
     print('\nSaving contrasts:')
-    for name, expr in CONTRASTS.items():
+    # sub-01..03 (pilot design) had three distractor value ranks; sub-04+ only
+    # rank 0 and rank 2. Average over whichever ranks exist, and skip contrasts
+    # that need a regressor this subject's design doesn't have.
+    import re
+    cols = set().union(*[dm.columns for dm in model.design_matrices_])
+    ranks = sorted(c for c in cols if re.fullmatch(r'dist_rank\d', c))
+    fb_shown = sorted(c for c in cols if re.fullmatch(r'feedback_(rank\d|absent)_shown', c))
+    contrasts = dict(CONTRASTS)
+    contrasts['distractor_any'] = f"({' + '.join(ranks)}) / {len(ranks)} - dist_absent"
+    contrasts['feedback'] = f"({' + '.join(fb_shown)}) / {len(fb_shown)} - feedback_omitted"
+    for name, expr in contrasts.items():
+        needed = set(re.findall(r'[A-Za-z_]\w*', expr))
+        if not needed <= cols:
+            print(f'  {name}: skipped (missing {sorted(needed - cols)})')
+            continue
         z_map = model.compute_contrast(expr, output_type='z_score')
         effect_map = model.compute_contrast(expr, output_type='effect_size')
 
