@@ -44,7 +44,7 @@ ARGS=(
 echo "report_nilearn_glm: sub-${PARTICIPANT_LABEL}  space=${SPACE}  fdr_alpha=${FDR_ALPHA}  cluster_threshold=${CLUSTER_THRESHOLD}"
 echo "Args: ${ARGS[*]}"
 
-. $HOME/init_conda.sh
+source $HOME/data/miniforge3/etc/profile.d/conda.sh
 conda activate value_capture
 export PYTHONUNBUFFERED=1
 

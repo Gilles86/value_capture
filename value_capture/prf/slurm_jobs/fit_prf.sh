@@ -46,7 +46,7 @@ ARGS=(
 echo "fit_prf: sub-${PARTICIPANT_LABEL}  glmsingle_deriv=${GLMSINGLE_DERIV}  gm_threshold=${GM_THRESHOLD:-none}  gd_iter=${GD_ITERATIONS}"
 echo "Args: ${ARGS[*]}"
 
-. $HOME/init_conda.sh
+source $HOME/data/miniforge3/etc/profile.d/conda.sh
 conda activate value_capture
 export PYTHONUNBUFFERED=1
 

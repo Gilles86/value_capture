@@ -46,7 +46,7 @@ ARGS=(
 echo "fit_glmsingle: sub-${PARTICIPANT_LABEL}  deriv=${FMRIPREP_DERIV}  fwhm=${FWHM}mm  debug=${DEBUG}"
 echo "Args: ${ARGS[*]}"
 
-. $HOME/init_conda.sh
+source $HOME/data/miniforge3/etc/profile.d/conda.sh
 conda activate value_capture
 export PYTHONUNBUFFERED=1
 

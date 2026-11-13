@@ -49,7 +49,7 @@ ARGS=(
 echo "fit_nilearn_glm: sub-${PARTICIPANT_LABEL}  deriv=${FMRIPREP_DERIV}  space=${SPACE}  res=${RES}  smoothing=${SMOOTHING_FWHM}"
 echo "Args: ${ARGS[*]}"
 
-. $HOME/init_conda.sh
+source $HOME/data/miniforge3/etc/profile.d/conda.sh
 conda activate value_capture
 export PYTHONUNBUFFERED=1
 

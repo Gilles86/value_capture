@@ -43,6 +43,8 @@ from value_capture.utils.data import get_all_subject_ids, BIDS_FOLDER
 
 warnings.filterwarnings('ignore')
 
+PILOTS = {'01', '02', '03'}
+
 CONTRASTS = [
     ('value_linear',    'dist_rank2 − dist_rank0',
      'Proximate reward — BOLD scales linearly with distractor value rank'),
@@ -132,10 +134,17 @@ def _contrast_page(pdf, z_map, name, expr, desc, fdr_thr, n_survived,
 
 
 def main(subjects=None, bids_folder=BIDS_FOLDER, space='MNI152NLin2009cAsym',
-         res='2', fdr_alpha=0.05, cluster_threshold=10):
+         res='2', fdr_alpha=0.05, cluster_threshold=10, include_pilots=False):
 
     if subjects is None:
         subjects = get_all_subject_ids()
+    # Pilot subjects (sub-01..03, earlier 3-rank design) are not independent of
+    # the main sample (see participants.tsv). Main study only by default.
+    if not include_pilots:
+        dropped = [s_ for s_ in subjects if s_ in PILOTS]
+        subjects = [s_ for s_ in subjects if s_ not in PILOTS]
+        if dropped:
+            print(f'Excluding pilot subjects {dropped} (pilots)')
 
     res_label = f'_res-{res}' if res else ''
     space_tag = f'space-{space}{res_label}'
@@ -240,6 +249,8 @@ if __name__ == '__main__':
     parser.add_argument('--res', default='2')
     parser.add_argument('--fdr-alpha', type=float, default=0.05)
     parser.add_argument('--cluster-threshold', type=int, default=10)
+    parser.add_argument('--include-pilots', action='store_true',
+                        help='Also include pilot sub-01..03 (not independent of main sample)')
     args = parser.parse_args()
 
     main(subjects=args.subjects,
@@ -247,4 +258,5 @@ if __name__ == '__main__':
          space=args.space,
          res=args.res,
          fdr_alpha=args.fdr_alpha,
-         cluster_threshold=args.cluster_threshold)
+         cluster_threshold=args.cluster_threshold,
+         include_pilots=args.include_pilots)

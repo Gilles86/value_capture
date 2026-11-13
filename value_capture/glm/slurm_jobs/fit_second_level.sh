@@ -39,7 +39,7 @@ ARGS=(
 echo "fit_second_level: space=${SPACE}  res=${RES}  fdr_alpha=${FDR_ALPHA}  cluster_threshold=${CLUSTER_THRESHOLD}"
 echo "Args: ${ARGS[*]}"
 
-. $HOME/init_conda.sh
+source $HOME/data/miniforge3/etc/profile.d/conda.sh
 conda activate value_capture
 export PYTHONUNBUFFERED=1
 
