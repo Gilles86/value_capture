@@ -1,0 +1,65 @@
+# Snakemake workflow profile for the value_capture pipeline on
+# UZH sciencecluster. Loaded via `--workflow-profile retsupp/snakemake/profile`.
+#
+# Per-rule resources override these defaults; see the Snakefile.
+
+executor: slurm
+
+# Default SLURM resources. Per-rule `resources:` blocks override.
+default-resources:
+  slurm_partition: standard
+  slurm_account: zne.uzh
+  runtime: 30
+  mem_mb: 8000
+  cpus_per_task: 2
+
+# Cap concurrent SLURM jobs in flight. 150 is a known-safe NFS-dogpile
+# ceiling, but Snakemake spawns a Timer thread per in-flight job for
+# status polling, and at 150+ in-flight jobs the driver hits the
+# login-node ulimit (`RuntimeError: can't start new thread`). 80 keeps
+# threads + concurrency comfortably in budget.
+jobs: 120
+
+# Throttle status polling — Snakemake's default re-polls every job
+# every 10s, which spins up enough Timer threads to OOM the driver's
+# thread budget on long-running runs.
+seconds-between-status-checks: 30
+max-status-checks-per-second: 1
+
+printshellcmds: True
+
+# Per-rule log: directives land under retsupp/snakemake/logs/ (relative
+# to the workflow root). The SLURM executor itself drops its sbatch
+# stdout under .snakemake/slurm_logs/<jobid>.log by default.
+slurm-logdir: ./value_capture/snakemake/logs/slurm
+
+# Retain incomplete files on rule failure so we can inspect; without
+# this snakemake helpfully deletes partial outputs.
+keep-incomplete: True
+
+# Re-run rule only if its declared input SET changes (file added/removed
+# from inputs), not when input mtimes drift. With `mtime` included,
+# refitting one model's neuropythy cascades reruns through all later
+# models in the chain — every m{N+1} sees m{N}'s freshly-written
+# archive as "newer" and reruns even though its own archive is on disk.
+# Existence check already prevents redoing completed outputs.
+rerun-triggers:
+  - input
+
+# Don't auto-retry failures. Lowprio preemption was the rationale for
+# restart-times: 1, but in practice it hid resource-sizing diagnoses by
+# silently doubling submissions of jobs guaranteed to fail again. With
+# 0, every failure lands once and surfaces in the log; we investigate
+# and resubmit deliberately. Re-enable only when failures are demonstrably
+# transient (preemption, NFS hiccup) and not deterministic (OOM, walltime).
+restart-times: 0
+
+# Snakemake's own latency tolerance for NFS — give file-existence checks
+# 30s grace so a just-written NIfTI on /shares doesn't trip the
+# "output missing" guard.
+latency-wait: 30
+
+# Stop scheduling new jobs after the first failure (default is to
+# continue with everything that doesn't depend on the failed job).
+# Set to True to let independent branches keep running.
+keep-going: True

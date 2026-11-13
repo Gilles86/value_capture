@@ -21,3 +21,6 @@ env/
 # Editor
 .vscode/
 .idea/
+.snakemake/
+value_capture/snakemake/logs/*
+!value_capture/snakemake/logs/.gitkeep

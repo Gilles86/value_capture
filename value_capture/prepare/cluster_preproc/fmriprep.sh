@@ -10,7 +10,7 @@
 module load apptainer/1.4.1
 
 export APPTAINERENV_FS_LICENSE=$HOME/freesurfer/license.txt
-export PARTICIPANT_LABEL=$(printf "%02d" $SLURM_ARRAY_TASK_ID)
+export PARTICIPANT_LABEL=${PARTICIPANT_LABEL:-$(printf "%02d" $SLURM_ARRAY_TASK_ID)}
 
 # Optional env vars for experimental runs:
 #   FMRIPREP_SUFFIX      — appended to output dir, e.g. "romeo" → fmriprep_romeo

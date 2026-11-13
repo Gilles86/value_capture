@@ -81,9 +81,16 @@ def main(subject, session, bids_dir, behavior_only=False):
     _log(f"Starting sub-{subject:02d} ses-{session}")
 
     if not behavior_only:
-        source_dir = bids_dir / "sourcedata" / "mri" / f"sub-{subject:02d}_ses-{session}"
-        if not source_dir.exists():
-            raise FileNotFoundError(f"Source directory not found: {source_dir}")
+        # Two layouts in sourcedata/mri: flat sub-XX_ses-Y (pilots) and nested sub-XX/ses-Y.
+        candidates_dirs = [
+            bids_dir / "sourcedata" / "mri" / f"sub-{subject:02d}" / f"ses-{session}",
+            bids_dir / "sourcedata" / "mri" / f"sub-{subject:02d}_ses-{session}",
+        ]
+        source_dir = next((d for d in candidates_dirs
+                           if d.exists() and any(d.glob("*.PAR"))), None)
+        if source_dir is None:
+            raise FileNotFoundError(f"No PAR files in any of: {candidates_dirs}")
+        _log(f"  Source: {source_dir}")
         _convert_anat(subject, session, source_dir, target_dir)
         _convert_func(subject, session, source_dir, target_dir)
         _convert_fmap(subject, session, source_dir, target_dir)
@@ -91,6 +98,22 @@ def main(subject, session, bids_dir, behavior_only=False):
     _convert_behavior(subject, session, bids_dir, target_dir)
 
     _log(f"Done: sub-{subject:02d} ses-{session}  (total {time.time()-t0:.0f}s)")
+
+
+def _series_nr(par):
+    """Scanner series number: the second-to-last _N_ token, e.g. ..._085mm_17_1.PAR -> 17."""
+    return int(par.stem.split("_")[-2])
+
+
+def _pick_latest(candidates, what):
+    """If an anatomical was acquired more than once, keep the latest series (a repeat
+    is normally re-acquired because the first was bad) and say so loudly."""
+    if len(candidates) > 1:
+        candidates = sorted(candidates, key=_series_nr)
+        _log(f"  WARNING: {len(candidates)} {what} candidates "
+             f"({[c.name for c in candidates]}); using latest series {candidates[-1].name}")
+        return [candidates[-1]]
+    return candidates
 
 
 def _convert_anat(subject, session, source_dir, target_dir):
@@ -102,8 +125,7 @@ def _convert_anat(subject, session, source_dir, target_dir):
     ses = f"ses-{session}"
 
     if session == 1:
-        candidates = list(source_dir.glob("*acq-MP2_085mm*_1.PAR"))
-        assert len(candidates) in [0, 1]
+        candidates = _pick_latest(list(source_dir.glob("*acq-MP2_085mm*_1.PAR")), "MP2RAGE")
         if candidates:
             _log(f"  Loading MP2RAGE: {candidates[0].name}")
             t = time.time()
@@ -115,8 +137,7 @@ def _convert_anat(subject, session, source_dir, target_dir):
                 anat_dir / f"{sub}_{ses}_inv-2_MP2RAGE.nii.gz")
             _log(f"  Saved inv-1 and inv-2 MP2RAGE ({time.time()-t:.0f}s)")
 
-        candidates = list(source_dir.glob("*acq-MP2_085mm*_3.PAR"))
-        assert len(candidates) in [0, 1]
+        candidates = _pick_latest(list(source_dir.glob("*acq-MP2_085mm*_3.PAR")), "T1w UNI")
         if candidates:
             _log(f"  Loading T1w UNI: {candidates[0].name}")
             t = time.time()
@@ -130,8 +151,7 @@ def _convert_anat(subject, session, source_dir, target_dir):
             _log(f"  Saved T1w ({time.time()-t:.0f}s)")
 
     elif session == 2:
-        candidates = list(source_dir.glob("*acq-T2w*.PAR"))
-        assert len(candidates) in [0, 1]
+        candidates = _pick_latest(list(source_dir.glob("*acq-T2w*.PAR")), "T2w")
         if candidates:
             _log(f"  Loading T2w: {candidates[0].name}")
             t = time.time()

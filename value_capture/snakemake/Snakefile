@@ -1,0 +1,149 @@
+# value_capture preprocessing + GLM pipeline (replaces prepare/submit_pipeline.sh
+# and glm/slurm_jobs/submit_nilearn_glm.sh for new subjects).
+#
+#   PAR/REC (sourcedata/mri/sub-XX/ses-Y)
+#     -> convert   (per sub x ses)            BIDS part-mag / part-phase
+#     -> nordic    (per sub x ses x task x run) rec-NORDIC_bold
+#     -> fmriprep  (per sub, both sessions)
+#     -> nilearn_glm (per sub, MNI res-2)  -> second_level (all subs)
+#     -> glmsingle   (per sub, T1w, ses-all)
+#
+# GLM rules need behaviour in sourcedata/behavior/sub-XX/ses-Y/run-N/; subjects
+# without it are left out of the GLM targets at DAG-build time (re-run the
+# driver after uploading behaviour and they get picked up).
+#
+# Submit the driver (never run on the login node):
+#   ssh sciencecluster 'cd ~/git/value_capture && sbatch value_capture/snakemake/run_driver.sh'
+
+import os
+
+BIDS = config["bids"]
+SUBS = [f"{int(s):02d}" for s in config["subjects"]]
+DONE = [f"{int(s):02d}" for s in config.get("done_subjects", [])]
+SESSIONS = [int(s) for s in config["sessions"]]
+RUNS = list(range(1, int(config["n_runs"]) + 1))
+REPO = os.path.abspath(".")
+PREP = f"{REPO}/value_capture/prepare"
+CONDA = ". $HOME/init_conda.sh && conda activate value_capture && export PYTHONUNBUFFERED=1"
+
+wildcard_constraints:
+    sub=r"\d{2}",
+    ses=r"\d",
+    run=r"\d+",
+    task="valuecapture|deepmreye",
+
+
+def has_behavior(sub):
+    d = f"{BIDS}/sourcedata/behavior/sub-{sub}"
+    return all(os.path.isdir(f"{d}/ses-{s}") for s in SESSIONS)
+
+
+GLM_SUBS = [s for s in DONE + SUBS if has_behavior(s)]
+
+FUNC = BIDS + "/sub-{sub}/ses-{ses}/func/sub-{sub}_ses-{ses}_task-{task}_run-{run}"
+NORDIC = FUNC + "_rec-NORDIC_bold.nii.gz"
+FMRIPREP_HTML = BIDS + "/derivatives/fmriprep/sub-{sub}.html"
+SPACE = "space-MNI152NLin2009cAsym_res-2"
+GLM_OUT = (BIDS + "/derivatives/nilearn_glm/sub-{sub}/func/sub-{sub}_task-valuecapture_"
+           + SPACE + "_contrast-value_linear_stat-z_statmap.nii.gz")
+GLMSINGLE_OUT = (BIDS + "/derivatives/glmsingle/sub-{sub}/ses-all/func/"
+                 "sub-{sub}_ses-all_task-valuecapture_space-T1w_desc-target_pe.nii.gz")
+SECOND_LEVEL = (BIDS + "/derivatives/nilearn_glm/group/func/group_task-valuecapture_"
+                + SPACE + "_contrast-value_linear_stat-z_statmap.nii.gz")
+
+
+def bold_runs(sub, ses):
+    return ([(("valuecapture"), r) for r in RUNS] + [("deepmreye", 1)])
+
+
+rule all:
+    input:
+        expand(FMRIPREP_HTML, sub=SUBS),
+        expand(GLM_OUT, sub=GLM_SUBS),
+        expand(GLMSINGLE_OUT, sub=GLM_SUBS),
+        SECOND_LEVEL if GLM_SUBS else [],
+
+
+rule preproc:
+    """Only preprocessing (snakemake preproc)."""
+    input: expand(FMRIPREP_HTML, sub=SUBS)
+
+
+rule convert:
+    output:
+        mag=[FUNC.replace("{task}", "valuecapture").replace("{run}", str(r)) + "_part-mag_bold.nii.gz" for r in RUNS]
+            + [FUNC.replace("{task}", "deepmreye").replace("{run}", "1") + "_part-mag_bold.nii.gz"],
+        phase=[FUNC.replace("{task}", "valuecapture").replace("{run}", str(r)) + "_part-phase_bold.nii.gz" for r in RUNS]
+            + [FUNC.replace("{task}", "deepmreye").replace("{run}", "1") + "_part-phase_bold.nii.gz"],
+    log: "value_capture/snakemake/logs/convert_sub-{sub}_ses-{ses}.log"
+    resources:
+        slurm_partition="standard", runtime=240, mem_mb=48000, cpus_per_task=2,
+    shell:
+        "{CONDA} && python -u {PREP}/convert_raw_mri_data.py {wildcards.sub} {wildcards.ses} "
+        "--bids_dir {BIDS} > {log} 2>&1"
+
+
+rule nordic:
+    input:
+        mag=FUNC + "_part-mag_bold.nii.gz",
+        phase=FUNC + "_part-phase_bold.nii.gz",
+    output: NORDIC
+    log: "value_capture/snakemake/logs/nordic_sub-{sub}_ses-{ses}_task-{task}_run-{run}.log"
+    resources:
+        slurm_partition="standard", runtime=180, mem_mb=64000, cpus_per_task=32,
+        constraint="INTEL",
+    shell:
+        "source /etc/profile && module load matlab && "
+        "matlab -nodisplay -r \"addpath('{PREP}/nordic'); "
+        "run_nordic('{wildcards.sub}', {wildcards.run}, '{BIDS}', {wildcards.ses}, '{wildcards.task}'); exit\" "
+        "> {log} 2>&1"
+
+
+rule fmriprep:
+    input:
+        nordic=lambda w: [NORDIC.format(sub=w.sub, ses=ses, task=t, run=r)
+                          for ses in SESSIONS for t, r in bold_runs(w.sub, ses)],
+    output: FMRIPREP_HTML
+    log: "value_capture/snakemake/logs/fmriprep_sub-{sub}.log"
+    resources:
+        slurm_partition="standard", slurm_extra="--qos=medium",
+        runtime=36 * 60, mem_mb=128000, cpus_per_task=16,
+    shell:
+        "mkdir -p /scratch/gdehol/fmriprep_wf_sub-{wildcards.sub} && cd {PREP}/cluster_preproc && "
+        "PARTICIPANT_LABEL={wildcards.sub} FMRIPREP_WORKDIR=/scratch/gdehol/fmriprep_wf_sub-{wildcards.sub} "
+        "bash -l ./fmriprep.sh > {log} 2>&1"
+
+
+rule nilearn_glm:
+    input: lambda w: [] if w.sub in DONE else FMRIPREP_HTML.format(sub=w.sub)
+    output: GLM_OUT
+    log: "value_capture/snakemake/logs/nilearn_glm_sub-{sub}.log"
+    resources:
+        slurm_partition="standard", runtime=120, mem_mb=64000, cpus_per_task=16,
+    shell:
+        "{CONDA} && python -u {REPO}/value_capture/glm/fit_nilearn_glm.py {wildcards.sub} "
+        "--bids-folder {BIDS} --space MNI152NLin2009cAsym --res 2 --smoothing-fwhm 6 --n-jobs 16 "
+        "> {log} 2>&1"
+
+
+rule glmsingle:
+    input: lambda w: [] if w.sub in DONE else FMRIPREP_HTML.format(sub=w.sub)
+    output: GLMSINGLE_OUT
+    log: "value_capture/snakemake/logs/glmsingle_sub-{sub}.log"
+    resources:
+        slurm_partition="standard", runtime=10 * 60, mem_mb=128000, cpus_per_task=16,
+    shell:
+        "{CONDA} && python -u {REPO}/value_capture/glm/fit_glmsingle.py {wildcards.sub} "
+        "--bids-folder {BIDS} > {log} 2>&1"
+
+
+rule second_level:
+    input: expand(GLM_OUT, sub=GLM_SUBS)
+    output: SECOND_LEVEL
+    log: "value_capture/snakemake/logs/second_level.log"
+    resources:
+        slurm_partition="standard", runtime=60, mem_mb=32000, cpus_per_task=4,
+    shell:
+        "{CONDA} && python -u {REPO}/value_capture/glm/fit_second_level.py "
+        "--bids-folder {BIDS} --space MNI152NLin2009cAsym --res 2 "
+        "--subjects {GLM_SUBS} > {log} 2>&1"
