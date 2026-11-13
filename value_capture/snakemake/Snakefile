@@ -6,7 +6,7 @@
 #     -> nordic    (per sub x ses x task x run) rec-NORDIC_bold
 #     -> fmriprep  (per sub, both sessions)
 #     -> nilearn_glm (per sub, MNI res-2)  -> second_level (all subs)
-#     -> glmsingle   (per sub, T1w, ses-all)
+#     -> glmsingle   (per sub, T1w, ses-all) -> prf (GaussianPRF2D on single-trial betas, GPU)
 #
 # GLM rules need behaviour in sourcedata/behavior/sub-XX/ses-Y/run-N/; subjects
 # without it are left out of the GLM targets at DAG-build time (re-run the
@@ -39,6 +39,9 @@ def has_behavior(sub):
 
 
 GLM_SUBS = [s for s in DONE + SUBS if has_behavior(s)]
+# DONE = pilots (3-rank design, not independent of main sample; see
+# participants.tsv): per-subject fits only, never in the group test.
+GROUP_SUBS = [s for s in SUBS if has_behavior(s)]
 
 FUNC = BIDS + "/sub-{sub}/ses-{ses}/func/sub-{sub}_ses-{ses}_task-{task}_run-{run}"
 NORDIC = FUNC + "_rec-NORDIC_bold.nii.gz"
@@ -48,6 +51,8 @@ GLM_OUT = (BIDS + "/derivatives/nilearn_glm/sub-{sub}/func/sub-{sub}_task-valuec
            + SPACE + "_contrast-value_linear_stat-z_statmap.nii.gz")
 GLMSINGLE_OUT = (BIDS + "/derivatives/glmsingle/sub-{sub}/ses-all/func/"
                  "sub-{sub}_ses-all_task-valuecapture_space-T1w_desc-target_pe.nii.gz")
+PRF_OUT = (BIDS + "/derivatives/prf_glmsingle/sub-{sub}/ses-all/func/"
+           "sub-{sub}_ses-all_task-valuecapture_space-T1w_desc-prfR2_pe.nii.gz")
 SECOND_LEVEL = (BIDS + "/derivatives/nilearn_glm/group/func/group_task-valuecapture_"
                 + SPACE + "_contrast-value_linear_stat-z_statmap.nii.gz")
 
@@ -61,7 +66,8 @@ rule all:
         expand(FMRIPREP_HTML, sub=SUBS),
         expand(GLM_OUT, sub=GLM_SUBS),
         expand(GLMSINGLE_OUT, sub=GLM_SUBS),
-        SECOND_LEVEL if GLM_SUBS else [],
+        SECOND_LEVEL if GROUP_SUBS else [],
+        expand(PRF_OUT, sub=GLM_SUBS),
 
 
 rule preproc:
@@ -138,7 +144,7 @@ rule glmsingle:
 
 
 rule second_level:
-    input: expand(GLM_OUT, sub=GLM_SUBS)
+    input: expand(GLM_OUT, sub=GROUP_SUBS)
     output: SECOND_LEVEL
     log: "value_capture/snakemake/logs/second_level.log"
     resources:
@@ -146,4 +152,17 @@ rule second_level:
     shell:
         "{CONDA} && python -u {REPO}/value_capture/glm/fit_second_level.py "
         "--bids-folder {BIDS} --space MNI152NLin2009cAsym --res 2 "
-        "--subjects {GLM_SUBS} > {log} 2>&1"
+        "--subjects {GROUP_SUBS} > {log} 2>&1"
+
+
+rule prf:
+    input: GLMSINGLE_OUT
+    output: PRF_OUT
+    log: "value_capture/snakemake/logs/prf_sub-{sub}.log"
+    resources:
+        slurm_partition="standard", runtime=180, mem_mb=32000, cpus_per_task=4,
+        gres="gpu:1", constraint="A100",
+    shell:
+        "{CONDA} && python -c 'import jax; print(jax.devices())' > {log} 2>&1 && "
+        "python -u {REPO}/value_capture/prf/fit_prf.py {wildcards.sub} --bids-folder {BIDS} "
+        "--gd-iterations 1000 --gm-threshold 0.1 --voxel-chunk-size 25000 >> {log} 2>&1"

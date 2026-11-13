@@ -12,13 +12,16 @@ import seaborn as sns
 
 from value_capture.utils.data import get_all_behavioral_data
 
-ORDER = ['No Distractor', 'Low Value', 'Medium Value', 'High Value']
+ORDER = ['No Distractor', 'Low Value', 'High Value']
 PALETTE = {'No Distractor': '#8f8f8f', 'Low Value': '#7fb3d5',
            'Medium Value': '#b58800', 'High Value': '#c0392b'}
 
 
 def main(bids_folder, out):
     df = get_all_behavioral_data(bids_folder=bids_folder).reset_index()
+    # Main study only: pilots sub-01..03 had a 3-rank design and are not
+    # independent of the main sample (see participants.tsv)
+    df = df[~df['subject'].isin(['01', '02', '03'])]
     df = df[df['condition'].isin(ORDER)]
     df['condition'] = pd.Categorical(df['condition'], ORDER, ordered=True)
     df['rt_ms'] = df['rt'] * 1000
@@ -49,7 +52,7 @@ def main(bids_folder, out):
         if y == 'rt_capture':
             ax.axhline(0, color='k', lw=0.6, ls='--')
     sns.despine(fig)
-    fig.suptitle(f'Value-driven capture, N = {n} (grey: subjects; dots: mean ± 95% CI)',
+    fig.suptitle(f'Value-driven capture, main study N = {n} (grey: subjects; dots: mean ± 95% CI)',
                  fontsize=10)
     fig.savefig(out)
     fig.savefig(out.replace('.pdf', '.png'), dpi=200)
