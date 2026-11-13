@@ -98,11 +98,11 @@ rule nordic:
     resources:
         slurm_partition="standard", runtime=180, mem_mb=64000, cpus_per_task=32,
         constraint="INTEL",
+    # Run the existing sbatch script in a separate login shell: Snakemake's
+    # `set -u` makes `source /etc/profile` die silently in-line.
     shell:
-        "source /etc/profile && module load matlab && "
-        "matlab -nodisplay -r \"addpath('{PREP}/nordic'); "
-        "run_nordic('{wildcards.sub}', {wildcards.run}, '{BIDS}', {wildcards.ses}, '{wildcards.task}'); exit\" "
-        "> {log} 2>&1"
+        "NORDIC_DIR={PREP}/nordic bash -l {PREP}/nordic/submit_nordic_job.sh "
+        "-s {wildcards.sub} -r {wildcards.run} -e {wildcards.ses} -t {wildcards.task} > {log} 2>&1"
 
 
 rule fmriprep:
