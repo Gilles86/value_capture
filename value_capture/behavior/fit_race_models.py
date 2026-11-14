@@ -47,6 +47,8 @@ def trialwise(get, model, df, xp=np):
             x = x + get(f'{k}_low')[s] * low + get(f'{k}_high')[s] * high
         if k == SESSION_PAR[model]:
             x = x + get('beta_session') * ses
+            if 'practice' in df:
+                x = x + get('beta_practice') * df.practice.values
         lin[k] = x
     exp = xp.exp
     sig = (lambda z: 1 / (1 + xp.exp(-z)))
@@ -96,6 +98,8 @@ def build(df, model):
                     hier(f'{k}_{c}', 0., .3, .15)
                 pm.Deterministic(f'{k}_value', m[f'{k}_high_mu'] - m[f'{k}_low_mu'])
         P['beta_session'] = pm.Normal('beta_session', 0., .3)
+        if 'practice' in df:
+            P['beta_practice'] = pm.Normal('beta_practice', 0., .3)
         vc, ve, a, t0 = trialwise(lambda k: P[k], model, df, xp=pt)
         tt = pt.maximum(t - t0, 1e-3)
         ll = pt.switch(resp, pt.switch(corr, logpdf(tt, vc, a) + logsf(tt, ve, a),
@@ -122,13 +126,15 @@ def np_loglik(df, model, get):
     return np.where(resp, np.where(corr, lpdf(vc) + lsf(ve), lpdf(ve) + lsf(vc)), lsf(vc) + lsf(ve))
 
 
-def main(model, draws, tune, post_only=False):
+def main(model, draws, tune, post_only=False, practice=False):
     import arviz as az
     import pymc as pm
     import xarray as xr
-    df = load(1)
+    df = load(1, practice=practice)
+    tag = model + ('_wpractice' if practice else '')
+    print(f'{len(df)} trials ({int(df.practice.sum())} practice), {int((~df.responded).sum())} no response')
     m, t0_max = build(df, model)
-    out_nc = ROOT / f'notes/data/race_{model}.nc'
+    out_nc = ROOT / f'notes/data/race_{tag}.nc'
     if post_only:
         idata = az.from_netcdf(out_nc)
     else:
@@ -145,7 +151,7 @@ def main(model, draws, tune, post_only=False):
                                                            ll.reshape(post.sizes['chain'], post.sizes['draw'], -1))}))
         az.to_netcdf(idata, out_nc)
     summ = az.summary(idata, var_names=[v for v in post.data_vars if not v.endswith('_z')])
-    print(f'=== {model}: divergences {int(idata.sample_stats.diverging.sum())}, max r_hat {summ.r_hat.max():.3f}, '
+    print(f'=== {tag}: divergences {int(idata.sample_stats.diverging.sum())}, max r_hat {summ.r_hat.max():.3f}, '
           f'min ess_bulk {summ.ess_bulk.min():.0f}')
     print(az.loo(idata))
     for k in COND_PARS[model]:
@@ -163,9 +169,9 @@ def main(model, draws, tune, post_only=False):
         fc, fe = rng.wald(a / vc, a ** 2), rng.wald(a / ve, a ** 2)
         rt = np.minimum(fc, fe) + t0
         ok = rt <= DEADLINE
-        rows.append(pd.DataFrame({'draw': i, 'subject': df.subject, 'cond': df.cond,
+        rows.append(pd.DataFrame({'draw': i, 'subject': df.subject, 'cond': df.cond, 'practice': df.practice,
                                   'rt': np.where(ok, rt, np.nan), 'correct': np.where(ok, (fc < fe) * 1., np.nan)}))
-    pd.concat(rows).to_parquet(ROOT / f'notes/data/race_{model}_ppc.parquet')
+    pd.concat(rows).to_parquet(ROOT / f'notes/data/race_{tag}_ppc.parquet')
 
 
 if __name__ == '__main__':
@@ -174,5 +180,6 @@ if __name__ == '__main__':
     ap.add_argument('--draws', type=int, default=1000)
     ap.add_argument('--tune', type=int, default=1000)
     ap.add_argument('--post-only', action='store_true', help='reuse the saved posterior')
+    ap.add_argument('--practice', action='store_true', help='also fit the practice runs (practice offset on drift)')
     a = ap.parse_args()
-    main(a.model, a.draws, a.tune, a.post_only)
+    main(a.model, a.draws, a.tune, a.post_only, a.practice)

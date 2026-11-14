@@ -25,10 +25,15 @@ ROOT = Path(__file__).resolve().parents[2]
 DEADLINE = 1.75
 
 
-def load(min_run):
+def load(min_run, practice=False):
     df = pd.read_csv(ROOT / 'notes/data/behavior_trials_main_raw.tsv', sep='\t', dtype={'subject': str})
     df['correct'] = df['correct'].map({True: 1., False: 0., 'True': 1., 'False': 0.})
     df = df[df.run >= min_run].copy()
+    if practice:  # the two practice runs per session (run -1 psychophysics room, run -2 scanner), same mapping
+        pr = pd.read_csv(ROOT / 'notes/data/behavior_trials_practice.tsv', sep='\t', dtype={'subject': str})
+        pr['correct'] = pr['correct'].map({True: 1., False: 0., 'True': 1., 'False': 0.})
+        df = pd.concat([df, pr[[c for c in df.columns if c in pr.columns]]], ignore_index=True)
+    df['practice'] = (df.run < 0).astype(float)
     df['responded'] = df.rt.notna() & df.correct.notna()
     df = df[~df.responded | (df.rt > .2)]
     df['subj_idx'] = pd.Categorical(df.subject).codes
