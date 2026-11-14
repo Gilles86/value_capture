@@ -26,7 +26,7 @@ DEADLINE = 1.75
 
 
 def load(min_run):
-    df = pd.read_csv(ROOT / 'notes/data/behavior_trials_main.tsv', sep='\t', dtype={'subject': str})
+    df = pd.read_csv(ROOT / 'notes/data/behavior_trials_main_raw.tsv', sep='\t', dtype={'subject': str})
     df['correct'] = df['correct'].map({True: 1., False: 0., 'True': 1., 'False': 0.})
     df = df[df.run >= min_run].copy()
     df['responded'] = df.rt.notna() & df.correct.notna()
