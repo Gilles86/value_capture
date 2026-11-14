@@ -117,7 +117,7 @@ rule fmriprep:
     shell:
         "mkdir -p /scratch/gdehol/fmriprep_wf_sub-{wildcards.sub} && cd {PREP}/cluster_preproc && "
         "PARTICIPANT_LABEL={wildcards.sub} FMRIPREP_WORKDIR=/scratch/gdehol/fmriprep_wf_sub-{wildcards.sub} "
-        "bash -l ./fmriprep.sh > {log} 2>&1"
+        "bash -l ./fmriprep.sh > {REPO}/{log} 2>&1"  # absolute: we cd away first
 
 
 rule nilearn_glm:
