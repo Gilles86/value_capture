@@ -3,8 +3,9 @@
 a, Group effects on the target drift (% change): distractor present vs absent, and high vs low
    value. Minimal model on scanner runs (filled) and with practice runs (open); for the value
    effect also the drift-only model with per-subject value slopes (grey), whose interval is wider.
-b, Posterior predictive check of the minimal model: correct-RT quantiles per condition
-   (data dots, model line + 95% band; quantiles per subject, then averaged, per draw).
+b, Posterior predictive check of the minimal model as a delta plot: how much slower each correct-RT
+   quantile is with a low / high-value distractor than without one (data dots, model line + 95% band;
+   quantiles per subject, then averaged, per draw).
 c, Same for accuracy.
 d, PSIS-LOO: ELPD of every variant relative to the best (± SE of the difference).
 
@@ -95,16 +96,20 @@ def quantiles(d, by):
 obs_q = quantiles(df.assign(k=0), ['k']).droplevel(0)
 pq = quantiles(sim, ['draw'])
 ax = at(3.0, Y0, 1.45, AH)
-for i, c in enumerate(ORDER):
-    band = pq.xs(c, level='cond')
+base = pq.xs('none', level='cond')
+ax.axhline(0, color=COL['none'], lw=.8, zorder=0)
+ax.text(.88, 2, 'Absent', color=COL['none'], fontsize=6.3, va='bottom', ha='center')
+for i, c in enumerate(['low', 'high']):
+    band = pq.xs(c, level='cond') - base
     ax.fill_between(Q, band.quantile(.025), band.quantile(.975), color=COL[c], alpha=.18, lw=0)
     ax.plot(Q, band.mean(), color=COL[c], lw=1)
-    ax.plot(np.array(Q) + (i - 1) * .018, obs_q.loc[c], 'o', color=COL[c], ms=3.4, mec='w', mew=.5, zorder=3)
-for j, c in enumerate(ORDER[::-1]):
-    ax.text(.05, .95 - j * .1, LAB[c], transform=ax.transAxes, color=COL[c], fontsize=6.3, va='top')
+    ax.plot(np.array(Q) + (i - .5) * .02, obs_q.loc[c] - obs_q.loc['none'], 'o', color=COL[c], ms=3.6,
+            mec='w', mew=.5, zorder=3)
+for j, c in enumerate(['high', 'low']):
+    ax.text(.05, .95 - j * .1, LAB[c] + ' value', transform=ax.transAxes, color=COL[c], fontsize=6.3, va='top')
 ax.set_xticks(Q, [f'{q:.1f}' for q in Q])
-ax.set_xlabel('RT quantile')
-ax.set_ylabel('Correct RT (ms)')
+ax.set_xlabel('RT quantile (fast to slow)')
+ax.set_ylabel('Slowing vs absent (ms)')
 letter(ax, 'b', -.42)
 
 obs_acc = df.groupby(['subject', 'cond']).correct.mean().unstack()[ORDER].mean() * 100
