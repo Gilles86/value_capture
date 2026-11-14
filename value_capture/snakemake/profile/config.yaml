@@ -28,10 +28,8 @@ max-status-checks-per-second: 1
 
 printshellcmds: True
 
-# Per-rule log: directives land under retsupp/snakemake/logs/ (relative
-# to the workflow root). The SLURM executor itself drops its sbatch
-# stdout under .snakemake/slurm_logs/<jobid>.log by default.
-slurm-logdir: ./value_capture/snakemake/logs/slurm
+# Logs live in $HOME/logs/value_capture/ (group convention): rule logs via LOGS in the Snakefile,
+# the executor's per-job sbatch logs via --slurm-logdir in run_driver.sh (a profile cannot expand $HOME).
 
 # Retain incomplete files on rule failure so we can inspect; without
 # this snakemake helpfully deletes partial outputs.

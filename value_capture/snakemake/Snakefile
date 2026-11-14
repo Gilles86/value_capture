@@ -23,6 +23,8 @@ DONE = [f"{int(s):02d}" for s in config.get("done_subjects", [])]
 SESSIONS = [int(s) for s in config["sessions"]]
 RUNS = list(range(1, int(config["n_runs"]) + 1))
 REPO = os.path.abspath(".")
+# All logs under $HOME/logs/<project>/ (group convention), never inside the repo.
+LOGS = os.path.expanduser("~/logs/value_capture/snakemake")
 PREP = f"{REPO}/value_capture/prepare"
 CONDA = "source $HOME/data/miniforge3/etc/profile.d/conda.sh && conda activate value_capture && export PYTHONUNBUFFERED=1"
 
@@ -81,7 +83,7 @@ rule convert:
             + [FUNC.replace("{task}", "deepmreye").replace("{run}", "1") + "_part-mag_bold.nii.gz"],
         phase=[FUNC.replace("{task}", "valuecapture").replace("{run}", str(r)) + "_part-phase_bold.nii.gz" for r in RUNS]
             + [FUNC.replace("{task}", "deepmreye").replace("{run}", "1") + "_part-phase_bold.nii.gz"],
-    log: "value_capture/snakemake/logs/convert_sub-{sub}_ses-{ses}.log"
+    log: LOGS + "/convert_sub-{sub}_ses-{ses}.log"
     resources:
         slurm_partition="standard", runtime=240, mem_mb=48000, cpus_per_task=2,
     shell:
@@ -94,7 +96,7 @@ rule nordic:
         mag=FUNC + "_part-mag_bold.nii.gz",
         phase=FUNC + "_part-phase_bold.nii.gz",
     output: NORDIC
-    log: "value_capture/snakemake/logs/nordic_sub-{sub}_ses-{ses}_task-{task}_run-{run}.log"
+    log: LOGS + "/nordic_sub-{sub}_ses-{ses}_task-{task}_run-{run}.log"
     resources:
         slurm_partition="standard", runtime=360, mem_mb=64000, cpus_per_task=32,  # deepmreye runs can exceed 3 h
         constraint="INTEL",
@@ -110,20 +112,20 @@ rule fmriprep:
         nordic=lambda w: [NORDIC.format(sub=w.sub, ses=ses, task=t, run=r)
                           for ses in SESSIONS for t, r in bold_runs(w.sub, ses)],
     output: FMRIPREP_HTML
-    log: "value_capture/snakemake/logs/fmriprep_sub-{sub}.log"
+    log: LOGS + "/fmriprep_sub-{sub}.log"
     resources:
         slurm_partition="standard", qos="medium",  # NOT slurm_extra: plugin rejects --qos there silently
         runtime=36 * 60, mem_mb=128000, cpus_per_task=16,
     shell:
         "mkdir -p /scratch/gdehol/fmriprep_wf_sub-{wildcards.sub} && cd {PREP}/cluster_preproc && "
         "PARTICIPANT_LABEL={wildcards.sub} FMRIPREP_WORKDIR=/scratch/gdehol/fmriprep_wf_sub-{wildcards.sub} "
-        "bash -l ./fmriprep.sh > {REPO}/{log} 2>&1"  # absolute: we cd away first
+        "bash -l ./fmriprep.sh > {log} 2>&1"  # LOGS is absolute, so the cd above is fine
 
 
 rule nilearn_glm:
     input: lambda w: [] if w.sub in DONE else FMRIPREP_HTML.format(sub=w.sub)
     output: GLM_OUT
-    log: "value_capture/snakemake/logs/nilearn_glm_sub-{sub}.log"
+    log: LOGS + "/nilearn_glm_sub-{sub}.log"
     resources:
         slurm_partition="standard", runtime=120, mem_mb=64000, cpus_per_task=16,
     shell:
@@ -135,7 +137,7 @@ rule nilearn_glm:
 rule glmsingle:
     input: lambda w: [] if w.sub in DONE else FMRIPREP_HTML.format(sub=w.sub)
     output: GLMSINGLE_OUT
-    log: "value_capture/snakemake/logs/glmsingle_sub-{sub}.log"
+    log: LOGS + "/glmsingle_sub-{sub}.log"
     resources:
         slurm_partition="standard", runtime=10 * 60, mem_mb=128000, cpus_per_task=16,
     shell:
@@ -146,7 +148,7 @@ rule glmsingle:
 rule second_level:
     input: expand(GLM_OUT, sub=GROUP_SUBS)
     output: SECOND_LEVEL
-    log: "value_capture/snakemake/logs/second_level.log"
+    log: LOGS + "/second_level.log"
     resources:
         slurm_partition="standard", runtime=60, mem_mb=32000, cpus_per_task=4,
     shell:
@@ -158,7 +160,7 @@ rule second_level:
 rule prf:
     input: GLMSINGLE_OUT
     output: PRF_OUT
-    log: "value_capture/snakemake/logs/prf_sub-{sub}.log"
+    log: LOGS + "/prf_sub-{sub}.log"
     resources:
         slurm_partition="standard", runtime=180, mem_mb=32000, cpus_per_task=4,
         gres="gpu:1", constraint="A100",
