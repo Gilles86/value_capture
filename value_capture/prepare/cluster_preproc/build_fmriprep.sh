@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH --job-name=build_fmriprep
 #SBATCH --account=zne.uzh
-#SBATCH --output=/home/gdehol/logs/build_fmriprep_%A.log
+#SBATCH --output=/home/%u/logs/value_capture/build_fmriprep_%A.log
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=32G

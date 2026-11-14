@@ -9,7 +9,7 @@
 #SBATCH --output=/home/%u/logs/value_capture/snakemake/driver_%j.log
 # Snakemake driver for value_capture (see Snakefile header). Resubmit if it
 # hits walltime — .snakemake/ persistence resumes where it left off.
-#   ssh sciencecluster 'cd ~/git/value_capture && sbatch value_capture/snakemake/run_driver.sh [target]'
+#   ssh sciencecluster 'cd ~/git/value_capture && bash value_capture/snakemake/submit_driver.sh [target]'
 set -eo pipefail
 echo "Host: $(hostname)  JobID: ${SLURM_JOB_ID}  Started: $(date)"
 cd "$HOME/git/value_capture"

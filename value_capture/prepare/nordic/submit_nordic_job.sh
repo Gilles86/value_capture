@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=nordic
-#SBATCH --output=/home/gdehol/logs/nordic_%j.log
+#SBATCH --output=/home/%u/logs/value_capture/nordic_%j.log
 #SBATCH --ntasks=32
 #SBATCH --time=02:00:00
 #SBATCH --mem=64gb

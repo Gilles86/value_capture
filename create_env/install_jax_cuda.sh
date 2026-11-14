@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=install_jax_cuda
-#SBATCH --output=/home/gdehol/logs/install_jax_cuda_%j.txt
+#SBATCH --output=/home/%u/logs/value_capture/install_jax_cuda_%j.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1

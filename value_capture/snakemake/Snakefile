@@ -13,7 +13,7 @@
 # driver after uploading behaviour and they get picked up).
 #
 # Submit the driver (never run on the login node):
-#   ssh sciencecluster 'cd ~/git/value_capture && sbatch value_capture/snakemake/run_driver.sh'
+#   ssh sciencecluster 'cd ~/git/value_capture && bash value_capture/snakemake/submit_driver.sh'
 
 import os
 

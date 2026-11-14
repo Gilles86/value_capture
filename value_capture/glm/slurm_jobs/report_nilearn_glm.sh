@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=report_nilearn_glm
 #SBATCH --account=zne.uzh
-#SBATCH --output=/home/gdehol/logs/report_nilearn_glm_%A_%a.txt
+#SBATCH --output=/home/%u/logs/value_capture/report_nilearn_glm_%A_%a.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G

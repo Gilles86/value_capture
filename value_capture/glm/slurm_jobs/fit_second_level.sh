@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=fit_second_level
 #SBATCH --account=zne.uzh
-#SBATCH --output=/home/gdehol/logs/fit_second_level_%j.txt
+#SBATCH --output=/home/%u/logs/value_capture/fit_second_level_%j.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G

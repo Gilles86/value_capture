@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=setup_env
-#SBATCH --output=/home/gdehol/logs/setup_env_%j.txt
+#SBATCH --output=/home/%u/logs/value_capture/setup_env_%j.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G

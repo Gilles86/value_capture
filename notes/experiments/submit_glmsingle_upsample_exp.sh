@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=glmsingle_upsample_exp
 #SBATCH --account=zne.uzh
-#SBATCH --output=/home/gdehol/logs/glmsingle_upsample_exp_%A-%a.txt
+#SBATCH --output=/home/%u/logs/value_capture/glmsingle_upsample_exp_%A-%a.txt
 #SBATCH --array=1-3
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16

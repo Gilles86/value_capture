@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH --job-name=fmriprep_valuecapture
 #SBATCH --account=zne.uzh
-#SBATCH --output=/home/gdehol/logs/valuecapture_fmriprep_%A-%a.txt
+#SBATCH --output=/home/%u/logs/value_capture/valuecapture_fmriprep_%A-%a.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
