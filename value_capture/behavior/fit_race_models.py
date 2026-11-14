@@ -27,14 +27,18 @@ sys.path.insert(0, str(Path(__file__).parent))
 from fit_race_model import DEADLINE, load  # noqa: E402
 
 COND_PARS = {'drift': ['log_vc'], 'advantage': ['log_v0', 'q'],
-             'advantage_ta': ['log_v0', 'q', 'log_a', 't0_raw']}
+             'advantage_ta': ['log_v0', 'q', 'log_a', 't0_raw'], 'minimal': []}
+# 'minimal': the fewest free parameters that still describe the data —
+#   log v_c = b0[subj] + b_dist[subj]*present + b_value*(+.5 high / -.5 low) + session + practice
+#   v_e one group value (errors are rare: per-subject error drift is barely identified),
+#   value effect group-level only (no per-subject value slopes), a and t0 per subject.
 INIT = {'log_vc': np.log(2.5), 'log_ve': np.log(.8), 'log_v0': np.log(1.5), 'q': .5,
         'log_a': np.log(1.5), 't0_raw': 0.}
-SESSION_PAR = {'drift': 'log_vc', 'advantage': 'q', 'advantage_ta': 'q'}
+SESSION_PAR = {'drift': 'log_vc', 'advantage': 'q', 'advantage_ta': 'q', 'minimal': 'log_vc'}
 
 
 def params_for(model):
-    return ['log_vc', 'log_ve', 'log_a', 't0_raw'] if model == 'drift' else ['log_v0', 'q', 'log_a', 't0_raw']
+    return ['log_vc', 'log_ve', 'log_a', 't0_raw'] if model in ('drift', 'minimal') else ['log_v0', 'q', 'log_a', 't0_raw']
 
 
 def trialwise(get, model, df, xp=np):
@@ -45,6 +49,8 @@ def trialwise(get, model, df, xp=np):
         x = get(k)[s]
         if k in COND_PARS[model]:
             x = x + get(f'{k}_low')[s] * low + get(f'{k}_high')[s] * high
+        if model == 'minimal' and k == 'log_vc':
+            x = x + get('beta_dist')[s] * (low + high) + get('beta_value') * .5 * (high - low)
         if k == SESSION_PAR[model]:
             x = x + get('beta_session') * ses
             if 'practice' in df:
@@ -52,7 +58,7 @@ def trialwise(get, model, df, xp=np):
         lin[k] = x
     exp = xp.exp
     sig = (lambda z: 1 / (1 + xp.exp(-z)))
-    if model == 'drift':
+    if model in ('drift', 'minimal'):
         vc, ve = exp(lin['log_vc']), exp(lin['log_ve'])
     else:
         v0 = exp(lin['log_v0'])
@@ -92,7 +98,14 @@ def build(df, model):
             P[name] = pm.Deterministic(name, g + sg * pm.Normal(f'{name}_z', 0, 1, shape=S))
 
         for k in params_for(model):
+            if model == 'minimal' and k == 'log_ve':   # one group-level error drift
+                g = pm.Normal('log_ve_mu', INIT[k], .7)
+                P[k] = pm.Deterministic(k, g * pt.ones(S))
+                continue
             hier(k, INIT[k], .7 if k != 't0_raw' else 1., .3 if k != 't0_raw' else .5)
+        if model == 'minimal':
+            hier('beta_dist', 0., .3, .15)
+            P['beta_value'] = pm.Normal('beta_value', 0., .3)
             if k in COND_PARS[model]:
                 for c in ('low', 'high'):
                     hier(f'{k}_{c}', 0., .3, .15)
@@ -154,6 +167,12 @@ def main(model, draws, tune, post_only=False, practice=False):
     print(f'=== {tag}: divergences {int(idata.sample_stats.diverging.sum())}, max r_hat {summ.r_hat.max():.3f}, '
           f'min ess_bulk {summ.ess_bulk.min():.0f}')
     print(az.loo(idata))
+    if model == 'minimal':
+        for nm in ('beta_dist_mu', 'beta_value', 'beta_session') + (('beta_practice',) if practice else ()):
+            d = post[nm].values.ravel()
+            h = az.hdi(d, hdi_prob=.95)
+            print(f'{nm:20s} {d.mean():+.3f} [{h[0]:+.3f}, {h[1]:+.3f}]  drift {100 * (np.exp(d.mean()) - 1):+.1f}%  '
+                  f'P(<0) = {(d < 0).mean():.3f}')
     for k in COND_PARS[model]:
         for c in ('low', 'high', 'value'):
             nm = f'{k}_{c}_mu' if c != 'value' else f'{k}_value'
