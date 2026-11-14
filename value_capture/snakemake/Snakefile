@@ -96,7 +96,7 @@ rule nordic:
     output: NORDIC
     log: "value_capture/snakemake/logs/nordic_sub-{sub}_ses-{ses}_task-{task}_run-{run}.log"
     resources:
-        slurm_partition="standard", runtime=180, mem_mb=64000, cpus_per_task=32,
+        slurm_partition="standard", runtime=360, mem_mb=64000, cpus_per_task=32,  # deepmreye runs can exceed 3 h
         constraint="INTEL",
     # Run the existing sbatch script in a separate login shell: Snakemake's
     # `set -u` makes `source /etc/profile` die silently in-line.
@@ -112,7 +112,7 @@ rule fmriprep:
     output: FMRIPREP_HTML
     log: "value_capture/snakemake/logs/fmriprep_sub-{sub}.log"
     resources:
-        slurm_partition="standard", slurm_extra="--qos=medium",
+        slurm_partition="standard", qos="medium",  # NOT slurm_extra: plugin rejects --qos there silently
         runtime=36 * 60, mem_mb=128000, cpus_per_task=16,
     shell:
         "mkdir -p /scratch/gdehol/fmriprep_wf_sub-{wildcards.sub} && cd {PREP}/cluster_preproc && "
