@@ -214,7 +214,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
             img = image.load_img(str(bold_path))
             if fwhm:
                 img = image.smooth_img(img, fwhm)
-            bold_data = img.get_fdata()
+            bold_data = img.get_fdata(dtype=np.float32)  # float64 doubles the peak (sub-13/14 OOM at 125G, 2026-11-16)
             n_vols = bold_data.shape[3]
 
             bold_data = upsample_bold(bold_data, UPSAMPLE_FACTOR)

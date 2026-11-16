@@ -138,8 +138,10 @@ rule glmsingle:
     input: lambda w: [] if w.sub in DONE else FMRIPREP_HTML.format(sub=w.sub)
     output: GLMSINGLE_OUT
     log: LOGS + "/glmsingle_sub-{sub}.log"
+    retries: 1   # 16-run subjects OOM'd at 125G in the ONOFF R^2 step (sub-13/14, 2026-11-16)
     resources:
-        slurm_partition="standard", runtime=10 * 60, mem_mb=128000, cpus_per_task=16,
+        slurm_partition="standard", runtime=10 * 60, cpus_per_task=16,
+        mem_mb=lambda wc, attempt: 128000 if attempt == 1 else 200000,
     shell:
         "{CONDA} && python -u {REPO}/value_capture/glm/fit_glmsingle.py {wildcards.sub} "
         "--bids-folder {BIDS} > {log} 2>&1"
