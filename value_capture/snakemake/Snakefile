@@ -115,7 +115,7 @@ rule fmriprep:
     log: LOGS + "/fmriprep_sub-{sub}.log"
     resources:
         slurm_partition="standard", qos="medium",  # NOT slurm_extra: plugin rejects --qos there silently
-        runtime=36 * 60, mem_mb=128000, cpus_per_task=16,
+        runtime=36 * 60, mem_mb=64000, cpus_per_task=8,  # measured 2026-11: anon ≤ 46 GB; 8 CPUs ≈ 1.07× slower, ~45% cheaper
     shell:
         "mkdir -p /scratch/gdehol/fmriprep_wf_sub-{wildcards.sub} && cd {PREP}/cluster_preproc && "
         "PARTICIPANT_LABEL={wildcards.sub} FMRIPREP_WORKDIR=/scratch/gdehol/fmriprep_wf_sub-{wildcards.sub} "

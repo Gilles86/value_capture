@@ -3,8 +3,8 @@
 #SBATCH --account=zne.uzh
 #SBATCH --output=/home/%u/logs/value_capture/valuecapture_fmriprep_%A-%a.txt
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=128G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
 #SBATCH --time=36:00:00
 
 module load apptainer/1.4.1
@@ -29,6 +29,12 @@ BIDS_FILTER_FILE="/bids_input/${FMRIPREP_BIDS_FILTER:-bids_filter.json}"
 OUTDIR="/data/derivatives/fmriprep${FMRIPREP_SUFFIX:+_${FMRIPREP_SUFFIX}}"
 WORKDIR="${FMRIPREP_WORKDIR:-/scratch/gdehol}"
 
+# Tell fMRIPrep its allocation (otherwise nipype plans with the whole node's RAM and cores).
+NCPU=${SLURM_CPUS_PER_TASK:-8}
+MEM_MB=$(( ${SLURM_MEM_PER_NODE:-65536} - 8000 ))
+STDOUT_COPY="${WORKDIR}/fmriprep_stdout_sub-${PARTICIPANT_LABEL}.log"
+
+set -o pipefail
 apptainer run \
   -B /shares/zne.uzh/containers/templateflow:/opt/templateflow \
   -B /shares/zne.uzh/gdehol/ds-valuecapture:/data \
@@ -41,9 +47,24 @@ apptainer run \
   --dummy-scans 4 \
   --skip_bids_validation \
   -w /workflow \
-  --nthreads 16 \
-  --omp-nthreads 16 \
+  --nthreads "$NCPU" \
+  --omp-nthreads "$NCPU" \
+  --mem-mb "$MEM_MB" \
   --low-mem \
   --no-submm-recon \
   --bids-filter-file $BIDS_FILTER_FILE \
-  ${FMRIPREP_EXTRA_FLAGS}
+  ${FMRIPREP_EXTRA_FLAGS} 2>&1 | tee "$STDOUT_COPY"
+RC=${PIPESTATUS[0]}
+
+# apptainer >= 1.4 can exit 1 after a run that finished cleanly (2026-11-14: all 12 subjects
+# printed "fMRIPrep finished successfully!" and exited 1, failing the Snakemake rule). fMRIPrep
+# prints that line only at the very end of a successful run, and writes a failure-report HTML on
+# real failures, so the HTML alone is no proof. Trust the line, not the exit code.
+if [[ $RC -ne 0 ]]; then
+    if grep -q "fMRIPrep finished successfully" "$STDOUT_COPY"; then
+        echo "apptainer exited $RC but fMRIPrep reported success: treating as a clean run."
+    else
+        echo "apptainer exited $RC and fMRIPrep did not report success: failed."
+        exit $RC
+    fi
+fi
