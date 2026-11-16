@@ -117,8 +117,10 @@ def upsample_bold(bold_4d, factor):
     n_new = int(round(t * factor))
     t_new = np.linspace(0, t - 1, n_new)
     flat = bold_4d.reshape(-1, t).astype(np.float32)
+    # interp1d returns float64 even for float32 input (the time grid is float64), which doubled
+    # the memory of every upsampled run: 16 runs ≈ 70 GB instead of 35 (sub-13/14 OOM at 125G).
     up = interp1d(t_orig, flat, axis=1, kind='linear',
-                  fill_value='extrapolate', assume_sorted=True)(t_new)
+                  fill_value='extrapolate', assume_sorted=True)(t_new).astype(np.float32)
     return up.reshape(x, y, z, n_new)
 
 
@@ -214,7 +216,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
             img = image.load_img(str(bold_path))
             if fwhm:
                 img = image.smooth_img(img, fwhm)
-            bold_data = img.get_fdata(dtype=np.float32)  # float64 doubles the peak (sub-13/14 OOM at 125G, 2026-11-16)
+            bold_data = img.get_fdata(dtype=np.float32)  # nibabel's default is float64
             n_vols = bold_data.shape[3]
 
             bold_data = upsample_bold(bold_data, UPSAMPLE_FACTOR)
