@@ -144,7 +144,7 @@ rule glmsingle:
     # 10 h limit was not enough). sub-13/14 have more voxels: peak 162 GB (OOM at 125G), ~18 h.
     resources:
         slurm_partition="standard", qos="medium", cpus_per_task=16,
-        runtime=lambda wc: (36 if wc.sub in ("13", "14") else 20) * 60,
+        runtime=lambda wc: (44 if wc.sub in ("13", "14") else 24) * 60,  # ~2.4x the estimate
         mem_mb=lambda wc, attempt: 200000 if wc.sub in ("13", "14") or attempt > 1 else 128000,
     shell:
         "{CONDA} && python -u {REPO}/value_capture/glm/fit_glmsingle.py {wildcards.sub} "
