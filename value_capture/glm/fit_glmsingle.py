@@ -111,16 +111,22 @@ def build_condition_index(all_events):
 
 
 def upsample_bold(bold_4d, factor):
-    """Linearly upsample a (x,y,z,t) array along the time axis by `factor`."""
+    """Linearly upsample a (x,y,z,t) array along the time axis by `factor`, as float32.
+
+    New sample k sits at k / factor original TRs, so the upsampled TR is exactly TR / factor
+    (the design is built at that TR). The last factor - 1 samples are extrapolated.
+    The old grid, np.linspace(0, t - 1, t * factor), had a step of (t - 1) / (t * factor - 1)
+    TRs, not 1 / factor: the data drifted against the design by up to half a TR (0.8 s) at the
+    end of each run. Grids are float32 because interp1d returns float64 for a float64 grid,
+    which doubled the memory of every run (sub-13/14 OOM at 125G, 2026-11-16).
+    """
     x, y, z, t = bold_4d.shape
-    t_orig = np.arange(t, dtype=np.float64)
     n_new = int(round(t * factor))
-    t_new = np.linspace(0, t - 1, n_new)
-    flat = bold_4d.reshape(-1, t).astype(np.float32)
-    # interp1d returns float64 even for float32 input (the time grid is float64), which doubled
-    # the memory of every upsampled run: 16 runs ≈ 70 GB instead of 35 (sub-13/14 OOM at 125G).
-    up = interp1d(t_orig, flat, axis=1, kind='linear',
-                  fill_value='extrapolate', assume_sorted=True)(t_new).astype(np.float32)
+    t_orig = np.arange(t, dtype=np.float32)
+    t_new = np.arange(n_new, dtype=np.float32) / np.float32(factor)
+    flat = bold_4d.reshape(-1, t).astype(np.float32, copy=False)
+    up = interp1d(t_orig, flat, axis=1, kind='linear', fill_value='extrapolate',
+                  assume_sorted=True, copy=False)(t_new).astype(np.float32, copy=False)
     return up.reshape(x, y, z, n_new)
 
 
