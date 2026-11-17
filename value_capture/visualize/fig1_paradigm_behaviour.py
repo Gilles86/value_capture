@@ -84,7 +84,7 @@ def panel_display(ax, margin=8.6):
     ax.plot([-5.0, -4.0], [-5.1, -5.1], color='w', lw=1.2, solid_capstyle='butt', zorder=6)
     ax.text(-4.5, -4.95, '1°', color='w', fontsize=6, ha='center', va='bottom', zorder=6)
     ax.set_xlim(-margin, margin)
-    ax.set_ylim(-8.3, 8.5)
+    ax.set_ylim(-8.0, 8.3)
     ax.set_aspect('equal')
     ax.set_axis_off()
 
@@ -127,16 +127,16 @@ def panel_timeline(fig, ax):
     aspect = bb.width * fig.get_figwidth() / (bb.height * fig.get_figheight())
     w = .1
     icon = w * aspect
-    ax.text(0, .43, '10 vertical + 10 horizontal bar positions', fontsize=6.5, color=FG, va='bottom')
+    ax.text(0, .55, '10 vertical + 10 horizontal bar positions', fontsize=6.5, color=FG, va='bottom')
     for k, (p, o) in enumerate([(BAR_POS[1], 'vertical'), (BAR_POS[5], 'vertical'), (BAR_POS[8], 'horizontal'),
                                 (BAR_POS[2], 'horizontal')]):
-        mini_display(ax.inset_axes([k * .12, .42 - icon - .02, w, icon]), bar=(p, o))
+        mini_display(ax.inset_axes([k * .12, .54 - icon - .02, w, icon]), bar=(p, o))
 
     # value mapping per session
     xs = .55
-    ax.text(xs, .43, 'Colour signals points (counterbalanced)', fontsize=6.5, color=FG, va='bottom')
+    ax.text(xs, .55, 'Colour signals points (counterbalanced)', fontsize=6.5, color=FG, va='bottom')
     for s, (hi_col, lo_col) in enumerate(((GREEN, ORANGE), (ORANGE, GREEN))):
-        yy = .42 - icon - .02
+        yy = .54 - icon - .02
         x = xs + s * .23
         for dx, c in ((0, hi_col), (.09, lo_col)):
             ins = ax.inset_axes([x + dx, yy, w * .8, icon * .8])
@@ -150,7 +150,7 @@ def panel_timeline(fig, ax):
         ax.text(x + .09 + w * .4, yy - .03, '×1', ha='center', va='top', fontsize=6, color=COL['low'], weight='bold')
         ax.text(x + .09, yy + icon * .8 + .02, f'Session {s + 1}' + (' (reversed)' if s else ''), ha='center',
                 va='bottom', fontsize=6, color='.4')
-    ax.text(xs, yy - .16, 'Per session: 2 practice runs (80 trials),\nthen 8 scanner runs of 40 trials',
+    ax.text(xs, yy - .1, 'Per session: 2 practice runs (80 trials),\nthen 8 scanner runs of 40 trials',
             fontsize=6, color='.4', va='top')
 
 
@@ -219,9 +219,9 @@ def panel_race(ax):
     ax.set_xlim(-14, 12)
     ax.set_xticks([-10, -5, 0, 5])
     ax.set_xlabel('Change in target drift rate (%)')
-    ax.set_ylim(-1.7, .65)
-    for j, (lab, style) in enumerate((('Scanner runs', 'f'), ('+ practice runs', 'o'))):
-        yy = 1.1 - j * .09
+    ax.set_ylim(-1.6, .45)
+    for j, (lab, style) in enumerate((('Race model, scanner runs', 'f'), ('+ practice runs', 'o'))):
+        yy = 1.04 - j * .1
         ax.plot([.02, .1], [yy, yy], transform=ax.transAxes, color=FG, lw=1.4, solid_capstyle='butt', clip_on=False)
         ax.plot(.06, yy, 'o', transform=ax.transAxes, color='w' if style == 'o' else FG, mec=FG, mew=1, ms=3.8,
                 clip_on=False, zorder=4)
@@ -270,19 +270,19 @@ def main():
     df = load_behaviour()
     rt = (df[df.correct == 1].groupby(['subject', 'cond']).rt.mean() * 1000).unstack()[ORDER]
     acc = (df.groupby(['subject', 'cond']).correct.mean() * 100).unstack()[ORDER]
-    W, H = 7.2, 7.0
+    W, H = 7.2, 6.35
     fig = plt.figure(figsize=(W, H))
     at = lambda x, y, w, h: fig.add_axes([x / W, y / H, w / W, h / H])  # noqa: E731
 
-    ax = at(.05, 4.7, 2.35, 2.25)
+    ax = at(.05, 4.12, 2.35, 2.2)
     panel_display(ax)
     ax.text(0, 1.0, 'a', transform=ax.transAxes, fontsize=8, weight='bold', va='top')
-    ax = at(2.75, 4.75, 4.35, 2.1)
+    ax = at(2.75, 4.22, 4.35, 2.05)
     panel_timeline(fig, ax)
     ax.text(-.04, 1.04, 'b', transform=ax.transAxes, fontsize=8, weight='bold', va='top')
 
     # row 2: RT and accuracy
-    Y0, PH = 2.75, 1.25
+    Y0, PH = 2.33, 1.2
     ax_c = at(.5, Y0, 1.3, PH)
     cond_panel(ax_c, rt, (700, 1050), [700, 800, 900, 1000],
                [('low', 'none', 'greater'), ('high', 'none', 'greater'), ('high', 'low', 'greater')], 'ms')
@@ -312,11 +312,10 @@ def main():
         s_.set_xlabel('Accuracy difference (%)', labelpad=1)
 
     # row 3: race model, its PPC, blocks
-    Y1, PH1 = .45, 1.3
+    Y1, PH1 = .42, 1.2
     ax_e = at(.85, Y1, 1.35, PH1)
     panel_race(ax_e)
     ax_e.text(-.6, 1.18, 'e', transform=ax_e.transAxes, fontsize=8, weight='bold', va='bottom')
-    ax_e.set_title('Racing-diffusion model', fontsize=7, color=FG, loc='left', x=-.55, y=1.2)
     ax_f = at(2.85, Y1, 1.25, PH1)
     panel_delta(ax_f)
     ax_f.text(-.4, 1.18, 'f', transform=ax_f.transAxes, fontsize=8, weight='bold', va='bottom')
