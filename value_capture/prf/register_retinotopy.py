@@ -76,9 +76,17 @@ def register_retinotopy(subject, prf_deriv='prf_glmsingle', sessions=None,
         'import numpy as _np; _np.complex = complex; '
         'from neuropythy.__main__ import main; import sys; sys.exit(main(sys.argv[1:]))'
     )
-    cmd = [
-        'conda', 'run', '-n', 'abstract_values',
-        'python', '-W', 'ignore', '-c', np_patch,
+    # Python with neuropythy AND a java on its PATH (the registration runs in Java via py4j).
+    # On the cluster: NEUROPYTHY_PYTHON=$HOME/data/conda/envs/retsupp_neuropythy/bin/python (has openjdk);
+    # the abstract_values env has no java and fails with "No such file or directory: 'java'".
+    np_python = os.environ.get('NEUROPYTHY_PYTHON')
+    if np_python:
+        env['PATH'] = str(Path(np_python).parent) + os.pathsep + env.get('PATH', '')
+        launcher = [np_python]
+    else:
+        launcher = ['conda', 'run', '-n', 'abstract_values', 'python']
+    cmd = launcher + [
+        '-W', 'ignore', '-c', np_patch,
         'register_retinotopy', fs_subject,
         '--lh-eccen',  hemi_files['lh']['prf_eccen'],
         '--lh-angle',  hemi_files['lh']['prf_angle'],

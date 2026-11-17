@@ -3,7 +3,7 @@
 #SBATCH --account=zne.uzh
 #SBATCH --partition=standard
 #SBATCH --output=/home/%u/logs/value_capture/surf_neuropythy_%A_%a.txt
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=16   # neuropythy's Java registration scales with threads (retsupp)
 #SBATCH --mem=24G
 #SBATCH --time=03:00:00
 # Sample the volumetric PRF maps to fsnative and run neuropythy's Bayesian retinotopy
@@ -17,5 +17,6 @@ source "$HOME/data/miniforge3/etc/profile.d/conda.sh"
 cd "$HOME/git/value_capture"
 BIDS=/shares/zne.uzh/gdehol/ds-valuecapture
 conda activate value_capture
+export NEUROPYTHY_PYTHON=$HOME/data/conda/envs/retsupp_neuropythy/bin/python   # has java
 python -u value_capture/prf/sample_prf_to_surface.py "$SUB" --bids-folder "$BIDS"
 python -u value_capture/prf/register_retinotopy.py "$SUB" --bids-folder "$BIDS"
