@@ -249,7 +249,8 @@ def _get_gm_mask(sub, session, bids_folder, threshold):
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
          gm_threshold=None, gd_iterations=1000, glmsingle_deriv='glmsingle',
-         voxel_chunk_size=5000, learning_rate=0.01, paradigm='bar_items', train_sessions=None):
+         voxel_chunk_size=5000, learning_rate=0.01, paradigm='bar_items', train_sessions=None,
+         model_kind='gauss', min_init_r2=.02):
 
     sub = Subject(subject, bids_folder=bids_folder)
     if sessions is None:
@@ -310,32 +311,66 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     paradigm_df.index.name = 'frame'
 
     # ── PRF model (no HRF — betas are already in amplitude space) ────────────
-    from braincoder.models import GaussianPRF2D
+    from braincoder.models import (DifferenceOfGaussiansPRF2D, DivisiveNormalizationGaussianPRF2D,
+                                   GaussianPRF2D)
     from braincoder.optimize import ParameterFitter
+    prf_deriv = f'prf_{glmsingle_deriv}' + ('_items' if paradigm == 'bar_items' else '')
+    if train_sessions:
+        prf_deriv += '_train-ses' + ''.join(str(t) for t in train_sessions)
+    gauss_deriv = prf_deriv
+    if model_kind != 'gauss':
+        prf_deriv += f'_{model_kind}'
+    MODEL = {'gauss': GaussianPRF2D, 'dog': DifferenceOfGaussiansPRF2D,
+             'dn': DivisiveNormalizationGaussianPRF2D}[model_kind]
+    fit_idx = np.arange(data_df.shape[1])
 
-    model = GaussianPRF2D(
-        data=data_df,
-        paradigm=paradigm_df,
-        grid_coordinates=grid_coords,
-    )
-    par_fitter = ParameterFitter(model=model, data=data_df, paradigm=paradigm_df)
+    if model_kind == 'gauss':
+        model = GaussianPRF2D(
+            data=data_df,
+            paradigm=paradigm_df,
+            grid_coordinates=grid_coords,
+        )
+        par_fitter = ParameterFitter(model=model, data=data_df, paradigm=paradigm_df)
 
-    # ── coarse grid search (correlation cost → amplitude/baseline-free) ───────
-    r = GRID_RADIUS * 0.9          # include the item ring (4°), not only the bar aperture
-    x_grid = np.linspace(-r, r, 13, dtype=np.float32)
-    y_grid = np.linspace(-r, r, 13, dtype=np.float32)
-    sd_grid = np.geomspace(0.1, 3.0, 10).astype(np.float32)
+        # ── coarse grid search (correlation cost → amplitude/baseline-free) ───────
+        r = GRID_RADIUS * 0.9          # include the item ring (4°), not only the bar aperture
+        x_grid = np.linspace(-r, r, 13, dtype=np.float32)
+        y_grid = np.linspace(-r, r, 13, dtype=np.float32)
+        sd_grid = np.geomspace(0.1, 3.0, 10).astype(np.float32)
 
-    print('  Grid search...')
-    pars_grid = par_fitter.fit_grid(
-        x=x_grid,
-        y=y_grid,
-        sd=sd_grid,
-        baseline=[np.float32(0.0)],
-        amplitude=[np.float32(1.0)],
-        use_correlation_cost=True,
-    )
-    pars_ols = par_fitter.refine_baseline_and_amplitude(pars_grid)
+        print('  Grid search...')
+        pars_grid = par_fitter.fit_grid(
+            x=x_grid,
+            y=y_grid,
+            sd=sd_grid,
+            baseline=[np.float32(0.0)],
+            amplitude=[np.float32(1.0)],
+            use_correlation_cost=True,
+        )
+        pars_ols = par_fitter.refine_baseline_and_amplitude(pars_grid)
+    else:
+        # Start from this subject's Gaussian fit (same paradigm and training data); fit only voxels with
+        # Gaussian R² >= min_init_r2, the rest stay NaN.
+        gfn = (Path(bids_folder) / 'derivatives' / gauss_deriv / f'sub-{subject}' / ses_label / 'func'
+               / f'sub-{subject}_{ses_label}_task-valuecapture_space-T1w_desc-prf_params.tsv')
+        g = pd.read_csv(gfn, sep='\t', index_col=0)
+        assert len(g) == data_df.shape[1], (len(g), data_df.shape[1])
+        fit_idx = np.flatnonzero(g.r2.to_numpy() >= min_init_r2)
+        print(f'  {model_kind}: init from {gauss_deriv}, {len(fit_idx)} voxels with Gaussian R² >= {min_init_r2}')
+        g = g.iloc[fit_idx]
+        if model_kind == 'dog':
+            pars_ols = pd.DataFrame({'x': g.x, 'y': g.y, 'sd': g.sd, 'baseline': g.baseline,
+                                     'amplitude': g.amplitude.clip(lower=1e-3), 'srf_amplitude': .1,
+                                     'srf_size': 2.})
+        else:
+            pars_ols = pd.DataFrame({'x': g.x, 'y': g.y, 'sd': g.sd, 'rf_amplitude': g.amplitude,
+                                     'srf_amplitude': .1, 'srf_size': 2.,
+                                     'neural_baseline': g.baseline.clip(lower=.01), 'surround_baseline': 1.})
+        pars_ols = pars_ols.astype(np.float32).reset_index(drop=True)
+        data_df = data_df.iloc[:, fit_idx]
+        data_df.columns = range(len(fit_idx))
+        par_fitter = ParameterFitter(model=MODEL(data=data_df, paradigm=paradigm_df, grid_coordinates=grid_coords),
+                                     data=data_df, paradigm=paradigm_df)
 
     # ── gradient descent (chunked to avoid GPU OOM) ───────────────────────────
     print(f'  Gradient descent ({gd_iterations} iterations, '
@@ -348,7 +383,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
         print(f'    chunk {i+1}/{len(chunks)}  voxels {start}–{end}')
         chunk_data = data_df.iloc[:, start:end]
         chunk_init = pars_ols.iloc[start:end]
-        chunk_model = GaussianPRF2D(
+        chunk_model = MODEL(
             data=chunk_data,
             paradigm=paradigm_df,
             grid_coordinates=grid_coords,
@@ -377,9 +412,13 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     # ── save ──────────────────────────────────────────────────────────────────
     # Put results under prf/<glmsingle_deriv>/ so smoothed and unsmoothed
     # fits live in separate directories.
-    prf_deriv = f'prf_{glmsingle_deriv}' + ('_items' if paradigm == 'bar_items' else '')
-    if train_sessions:
-        prf_deriv += '_train-ses' + ''.join(str(t) for t in train_sessions)
+    if model_kind != 'gauss':      # back to all mask voxels, NaN where not fitted
+        full = pd.DataFrame(np.nan, index=range(n_voxels), columns=pars_gd.columns, dtype=np.float32)
+        full.iloc[fit_idx] = pars_gd.to_numpy()
+        pars_gd = full
+        r2_full = pd.Series(np.nan, index=range(n_voxels), dtype=np.float32)
+        r2_full.iloc[fit_idx] = r2.to_numpy()
+        r2 = r2_full
     out_dir = (
         Path(bids_folder) / 'derivatives' / prf_deriv
         / f'sub-{subject}' / ses_label / 'func'
@@ -395,7 +434,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
         save_param_nifti(arr, mask_img, out_dir / (fn_base.format(desc=desc) + '_pe.nii.gz'))
 
     # Individual parameter NIfTIs
-    for col in ['x', 'y', 'sd', 'baseline', 'amplitude']:
+    for col in pars_gd.columns:
         _save(pars_gd[col].values, f'prf{col}')
 
     # Derived maps
@@ -433,6 +472,9 @@ if __name__ == '__main__':
     parser.add_argument('--train-sessions', type=int, nargs='+', default=None,
                         help='Fit on the trials of these sessions only (cross-validation); output '
                              'prf_<deriv>[_items]_train-ses<N>.')
+    parser.add_argument('--model', choices=['gauss', 'dog', 'dn'], default='gauss',
+                        help='gauss (grid search + GD); dog / dn start from the Gaussian fit of the same '
+                             'paradigm and write prf_<deriv>[_items][_train-sesN]_<model>.')
     parser.add_argument('--bids-folder', default=str(BIDS_FOLDER))
     parser.add_argument(
         '--gm-threshold', type=float, default=None,
@@ -467,4 +509,5 @@ if __name__ == '__main__':
         learning_rate=args.learning_rate,
         paradigm=args.paradigm,
         train_sessions=args.train_sessions,
+        model_kind=args.model,
     )
