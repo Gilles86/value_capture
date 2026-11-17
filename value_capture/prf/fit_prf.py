@@ -320,7 +320,24 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     gauss_deriv = prf_deriv
     if model_kind != 'gauss':
         prf_deriv += f'_{model_kind}'
-    MODEL = {'gauss': GaussianPRF2D, 'dog': DifferenceOfGaussiansPRF2D,
+    from keras import ops
+    from braincoder.utils.backend import softplus_inverse
+
+    class DoGPRF2D(DifferenceOfGaussiansPRF2D):
+        """braincoder's DoG inherits the Gaussian's 5-column transforms and drops srf_amplitude / srf_size
+        (shape error in GD). Same fix as retsupp's braincoder fork: srf_amplitude > 0, srf_size > 1."""
+
+        def _transform_parameters_forward(self, parameters):
+            return ops.concatenate([GaussianPRF2D._transform_parameters_forward(self, parameters[:, :5]),
+                                    ops.softplus(parameters[:, 5:6]), ops.softplus(parameters[:, 6:7]) + 1.],
+                                   axis=1)
+
+        def _transform_parameters_backward(self, parameters):
+            return ops.concatenate([GaussianPRF2D._transform_parameters_backward(self, parameters[:, :5]),
+                                    softplus_inverse(parameters[:, 5:6]), softplus_inverse(parameters[:, 6:7] - 1.)],
+                                   axis=1)
+
+    MODEL = {'gauss': GaussianPRF2D, 'dog': DoGPRF2D,
              'dn': DivisiveNormalizationGaussianPRF2D}[model_kind]
     fit_idx = np.arange(data_df.shape[1])
 
