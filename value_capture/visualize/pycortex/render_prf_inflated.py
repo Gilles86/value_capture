@@ -35,11 +35,11 @@ BIDS = Path('/data/ds-valuecapture')
 FS = BIDS / 'derivatives' / 'fmriprep' / 'sourcedata' / 'freesurfer'
 CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 R2_RAMP = (.05, .20)         # R² -> opacity of the colour over the curvature
-ECC_MAX_SHOWN = 3.2          # stimulus aperture radius (6.33 deg diameter)
+ECC_MAX_SHOWN = 5.0          # stimulus grid radius (bar aperture 3.17 deg, search items at 4 deg)
 CURV = dict(brightness=.55, contrast=.17, smooth=20)
-PANELS = {'angle': ('hsv', 0, 1), 'ecc': ('nipy_spectral', 0, 3.2),
+PANELS = {'angle': ('hsv', 0, 1), 'ecc': ('nipy_spectral', 0, 5),
           'sd': ('nipy_spectral', 0, 2), 'r2': ('inferno', 0, .6)}
-PRF_DIR = 'prf_glmsingle'
+PRF_DIR = 'prf_glmsingle_items'   # bar + search items (2026-11-17); 'prf_glmsingle' = bar only
 BASE_VIEW = {'camera.target': [0, 0, 0], 'camera.radius': 190, 'surface.{subject}.unfold': 1,
              'surface.{subject}.specularity': 0}
 VIEWS = {
