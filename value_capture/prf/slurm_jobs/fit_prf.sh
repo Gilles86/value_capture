@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=fit_prf
 #SBATCH --account=zne.uzh
-#SBATCH --output=/home/%u/logs/value_capture/fit_prf_%j.txt
+#SBATCH --output=/home/%u/logs/value_capture/fit_prf_%A_%a.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
-#SBATCH --constraint=A100
+#SBATCH --constraint=A100   # L4 (24 GB) runs out of GPU memory in the grid search on the 10k-pixel grid
 #SBATCH --mem=32G
 #SBATCH --time=03:00:00
 
