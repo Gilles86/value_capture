@@ -28,8 +28,8 @@ from nilearn.glm.second_level import non_parametric_inference
 from nilearn.reporting import get_clusters_table
 from scipy import stats
 
-CONTRASTS = ['cue_value', 'capture', 'outcome_magnitude', 'outcome_rpe', 'outcome_uncued', 'feedback_vs_omit',
-             'omission_value']
+CONTRASTS = ['outcome_logreward', 'outcome_magnitude', 'cue_value', 'capture', 'outcome_rpe', 'outcome_uncued',
+             'feedback_vs_omit', 'omission_value']
 SPACE = 'space-MNI152NLin2009cAsym_res-2'
 
 

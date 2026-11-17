@@ -25,6 +25,7 @@ Contrasts:
   outcome_uncued     fb_high_uncued − fb_low_uncued
   feedback_vs_omit   mean(fb_*) − mean(omit_*)
   omission_value     omit_high − omit_low                   omission of a large vs small expected reward (−RPE)
+  outcome_logreward  parametric log(1 + points) on all shown feedback, centred (fb_logpoints)
 
     python value_capture/glm/fit_nilearn_glm_reward.py 04 --bids-folder /shares/zne.uzh/gdehol/ds-valuecapture \\
         --space MNI152NLin2009cAsym --res 2 --smoothing-fwhm 6 --n-jobs 8
@@ -50,6 +51,9 @@ CONTRASTS = {
     'feedback_vs_omit': ('(fb_high_cued + fb_low_cued + fb_high_uncued + fb_low_uncued) / 4 '
                          '- (omit_high + omit_low + omit_absent) / 3'),
     'omission_value': 'omit_high - omit_low',
+    # log(1 + points) received, over and above the condition means (cued/uncued × high/low): within-condition
+    # reward variation (faster responses earn more)
+    'outcome_logreward': 'fb_logpoints',
 }
 CONFOUNDS = ['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z', 'framewise_displacement', 'dvars'] + \
     [f'a_comp_cor_{i:02d}' for i in range(7)]
@@ -61,13 +65,19 @@ def build_events(ev, n_removed):
     for _, r in ev[ev.event_type == 'target'].iterrows():
         lab = 'search_absent' if not r.distractor_present else ('search_high' if r.value_rank == 2 else 'search_low')
         rows.append(dict(onset=r.onset - off, duration=1.75, trial_type=lab))
-    for _, r in ev[ev.event_type == 'feedback'].iterrows():
+    fb = ev[ev.event_type == 'feedback']
+    shown = fb.show_feedback.isin([True, 'True'])
+    logp = np.log1p(fb.earned_points.fillna(0).astype(float))
+    logp_c = logp - logp[shown].mean()           # centred over shown feedback (nilearn does not centre)
+    for (_, r), lp in zip(fb.iterrows(), logp_c):
         mag = 'high' if r.value_rank == 2 else 'low'
         if r.show_feedback in (True, 'True'):
             lab = f'fb_{mag}_' + ('cued' if r.distractor_present in (True, 'True') else 'uncued')
+            # parametric: log(1 + points) actually received, all shown feedback
+            rows.append(dict(onset=r.onset - off, duration=1.0, trial_type='fb_logpoints', modulation=lp))
         else:
             lab = f'omit_{mag}' if r.distractor_present in (True, 'True') else 'omit_absent'
-        rows.append(dict(onset=r.onset - off, duration=1.0, trial_type=lab))
+        rows.append(dict(onset=r.onset - off, duration=1.0, trial_type=lab, modulation=1.))
     return pd.DataFrame(rows).sort_values('onset').reset_index(drop=True)
 
 
