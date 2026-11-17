@@ -124,17 +124,26 @@ def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deri
     model.fit(imgs, events=evs, confounds=confs)
     out = Path(bids_folder) / 'derivatives' / 'nilearn_glm_reward' / f'sub-{subject}' / 'func'
     out.mkdir(parents=True, exist_ok=True)
-    cols = set().union(*[dm.columns for dm in model.design_matrices_])
+    from nilearn.glm.contrasts import expression_to_contrast_vector
+    import re
     for name, expr in CONTRASTS.items():
-        import re
-        if not set(re.findall(r'[A-Za-z_]\w*', expr)) <= cols:
-            print(f'{name}: skipped (missing regressors)')
+        # Per-run contrast vectors: a run that lacks one of the contrast's regressors (e.g. no uncued
+        # low-reward feedback in that run) gets a null vector and is left out of the fixed-effects combination,
+        # instead of failing the whole subject (KeyError) or biasing the contrast.
+        needed = set(re.findall(r'[A-Za-z_]\w*', expr))
+        vecs = [expression_to_contrast_vector(expr, list(dm.columns)) if needed <= set(dm.columns)
+                else np.zeros(dm.shape[1]) for dm in model.design_matrices_]
+        n_used = sum(v.any() for v in vecs)
+        if n_used == 0:
+            print(f'{name}: skipped (no run has all regressors)')
             continue
         for kind in ('z_score', 'effect_size'):
-            img = model.compute_contrast(expr, output_type=kind)
+            img = model.compute_contrast(vecs, output_type=kind)
             img.set_data_dtype(np.float32)
             img.to_filename(str(out / f'sub-{subject}_task-valuecapture_{space_tag}_contrast-{name}'
                                       f'_stat-{"z" if kind == "z_score" else "effect"}_statmap.nii.gz'))
+        if n_used < len(vecs):
+            print(f'{name}: {n_used}/{len(vecs)} runs', flush=True)
         print(f'{name}: saved', flush=True)
 
 
