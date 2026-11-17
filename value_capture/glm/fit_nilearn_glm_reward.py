@@ -13,6 +13,8 @@ Regressors (SPM canonical HRF):
   Feedback omitted (1 s):    omit_high, omit_low, omit_absent
   Errors are kept in their condition; a fast-response bonus scales points, so 'high/low' here is the multiplier.
 
+Frame times: slice_time_ref = fMRIPrep's StartTime / TR (slice-timing correction to mid-TR; nilearn's default 0
+would shift every onset by ~0.8 s).
 Nuisance: 6 motion parameters, FD, DVARS, 7 aCompCor and fMRIPrep's DCT cosines (the older
 fit_nilearn_glm.py turned nilearn's drift model off but did not pass the cosines, so it had no high-pass).
 
@@ -32,6 +34,7 @@ Contrasts:
 Output: <bids>/derivatives/nilearn_glm_reward/sub-<sub>/func/*_contrast-<name>_stat-{z,effect}_statmap.nii.gz
 """
 import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -94,7 +97,7 @@ def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deri
     sub = Subject(subject, bids_folder=bids_folder)
     sessions = sub.get_sessions()
     space_tag = f'space-{space}' + (f'_res-{res}' if res else '')
-    imgs, evs, confs = [], [], []
+    imgs, evs, confs, start_times = [], [], [], []
     for ses in sessions:
         runs = sub.get_runs(ses)
         for run, bold in zip(runs, sub.get_preprocessed_bold(ses, runs, fmriprep_deriv=fmriprep_deriv,
@@ -104,11 +107,17 @@ def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deri
             n_removed = len(raw[raw.event_type == 'pulse']) - n_vols
             ev = build_events(raw, n_removed)
             imgs.append(str(bold))
+            start_times.append(json.loads(Path(str(bold).replace('.nii.gz', '.json')).read_text()).get('StartTime', 0.))
             evs.append(ev)
             confs.append(confounds(sub, ses, run, fmriprep_deriv))
             print(f'ses-{ses} run-{run}: {n_vols} vols, ' +
                   ', '.join(f'{k} {v}' for k, v in ev.trial_type.value_counts().sort_index().items()), flush=True)
-    model = FirstLevelModel(t_r=TR, hrf_model='spm', drift_model=None, noise_model='ar1',
+    # fMRIPrep's slice-timing correction resamples every slice to StartTime (here 0.77 s = mid-TR); nilearn
+    # assumes frame times at the start of each TR (slice_time_ref=0) unless told, a 0.77 s shift.
+    assert np.ptp(start_times) < 1e-6, start_times
+    slice_time_ref = start_times[0] / TR
+    print(f'StartTime {start_times[0]} s -> slice_time_ref {slice_time_ref:.3f}', flush=True)
+    model = FirstLevelModel(t_r=TR, hrf_model='spm', slice_time_ref=slice_time_ref, drift_model=None, noise_model='ar1',
                             smoothing_fwhm=smoothing_fwhm, standardize=False, n_jobs=n_jobs,
                             mask_img=sub.get_brain_mask(sessions[0], fmriprep_deriv=fmriprep_deriv,
                                                         space=space, res=res))
