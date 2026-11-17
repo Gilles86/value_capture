@@ -249,7 +249,7 @@ def _get_gm_mask(sub, session, bids_folder, threshold):
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
          gm_threshold=None, gd_iterations=1000, glmsingle_deriv='glmsingle',
-         voxel_chunk_size=5000, learning_rate=0.01, paradigm='bar_items'):
+         voxel_chunk_size=5000, learning_rate=0.01, paradigm='bar_items', train_sessions=None):
 
     sub = Subject(subject, bids_folder=bids_folder)
     if sessions is None:
@@ -271,6 +271,13 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     print(f'  {len(trials)} trials loaded')
     if paradigm == 'bar_items':
         trials = add_item_info(sub, trials)
+    keep_rows = None
+    if train_sessions:
+        # Cross-validation: fit on the trials of these sessions only (betas from the joint
+        # all-session GLMsingle fit; its HRF/denoising choices saw all runs, a mild leak).
+        keep_rows = trials['session'].isin(train_sessions).to_numpy()
+        trials = trials[keep_rows].reset_index(drop=True)
+        print(f'  Training on sessions {train_sessions}: {keep_rows.sum()} trials')
 
     # ── brain / gray-matter mask ──────────────────────────────────────────────
     if gm_threshold is not None:
@@ -287,6 +294,8 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
 
     # ── flatten betas → (n_trials, n_voxels) ─────────────────────────────────
     betas_2d = masking.apply_mask(betas_img, mask_img)   # (n_trials, n_voxels)
+    if keep_rows is not None:
+        betas_2d = betas_2d[keep_rows]
     n_trials, n_voxels = betas_2d.shape
     print(f'  Betas: {n_trials} trials × {n_voxels} voxels')
 
@@ -369,6 +378,8 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     # Put results under prf/<glmsingle_deriv>/ so smoothed and unsmoothed
     # fits live in separate directories.
     prf_deriv = f'prf_{glmsingle_deriv}' + ('_items' if paradigm == 'bar_items' else '')
+    if train_sessions:
+        prf_deriv += '_train-ses' + ''.join(str(t) for t in train_sessions)
     out_dir = (
         Path(bids_folder) / 'derivatives' / prf_deriv
         / f'sub-{subject}' / ses_label / 'func'
@@ -419,6 +430,9 @@ if __name__ == '__main__':
     parser.add_argument('subject', help="Subject label without 'sub-', e.g. 01")
     parser.add_argument('--sessions', type=int, nargs='+', default=None,
                         help='Session number(s). Default: all available.')
+    parser.add_argument('--train-sessions', type=int, nargs='+', default=None,
+                        help='Fit on the trials of these sessions only (cross-validation); output '
+                             'prf_<deriv>[_items]_train-ses<N>.')
     parser.add_argument('--bids-folder', default=str(BIDS_FOLDER))
     parser.add_argument(
         '--gm-threshold', type=float, default=None,
@@ -452,4 +466,5 @@ if __name__ == '__main__':
         voxel_chunk_size=args.voxel_chunk_size,
         learning_rate=args.learning_rate,
         paradigm=args.paradigm,
+        train_sessions=args.train_sessions,
     )
