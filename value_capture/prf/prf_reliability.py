@@ -29,6 +29,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from nilearn import masking
 
+from value_capture.prf.fit_prf import save_param_nifti  # float32 output (mask dtype trap)
+
 import os
 os.environ.setdefault('KERAS_BACKEND', 'jax')
 os.environ.setdefault('JAX_PLATFORM_NAME', 'cpu')   # Metal doesn't support large tensors
@@ -99,13 +101,11 @@ def run_subject(subject, bids_folder, glmsingle_deriv, prf_deriv, r2_min, out_di
 
     for label, r2 in run_r2.items():
         r2_arr = np.where(np.isfinite(r2.values), r2.values, 0.0).astype(np.float32)
-        masking.unmask(r2_arr, mask_img).to_filename(
-            str(out_dir / f'{fn_base}_run-{label}_desc-prfR2run_pe.nii.gz'))
+        save_param_nifti(r2_arr, mask_img, out_dir / f'{fn_base}_run-{label}_desc-prfR2run_pe.nii.gz')
 
     r2_stack = np.stack([r2.values for r2 in run_r2.values()], axis=0)
     r2_mean  = np.nanmean(r2_stack, axis=0).astype(np.float32)
-    masking.unmask(r2_mean, mask_img).to_filename(
-        str(out_dir / f'{fn_base}_desc-prfR2runmean_pe.nii.gz'))
+    save_param_nifti(r2_mean, mask_img, out_dir / f'{fn_base}_desc-prfR2runmean_pe.nii.gz')
     print(f'  NIfTIs saved to {out_dir}')
 
     # ── Pairwise scatter — only visually responsive voxels ─────────────────
