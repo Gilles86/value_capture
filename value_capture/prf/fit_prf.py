@@ -3,9 +3,21 @@
 Fit a 2-D Gaussian PRF model to GLMsingle single-trial betas.
 
 Each GLMsingle beta is treated as a single "frame".  The corresponding
-stimulus is the binary bar image reconstructed from the trial metadata
-(bar_position × bar_orientation).  No HRF is modelled because GLMsingle
-already handles the haemodynamic convolution when estimating betas.
+stimulus is the visual input of that trial's target phase, reconstructed as closely as
+possible (``--paradigm bar_items``, default since 2026-11-17):
+
+  - the flickering bar (bar_position × bar_orientation) inside its aperture (radius 3.17°);
+  - all 8 search-array items: grey 1.5 × 0.375° rectangles at 4° eccentricity
+    (angles i·45°, i = 0..7, from experiment/stimuli.py), the target with
+    ``target_orientation`` and the 7 others (incl. the colour distractor) orthogonal to it.
+
+The items sit OUTSIDE the bar aperture, so the grid extends to ±5° (it was ±3.2°, bar only,
+which forced every PRF near the items onto the aperture edge). Colour (distractor vs grey) and
+the small dots inside the items are not in this luminance paradigm; target / distractor
+effects belong in gain fields (as in retsupp). The whole display, fixation included, was
+shifted down by 1.1° on screen; coordinates here are relative to fixation, so no shift.
+
+No HRF is modelled because GLMsingle already handles the haemodynamic convolution.
 
 Geometry is derived from experiment/settings/default.yml so it stays in
 sync with the experiment code, following the same logic as
@@ -15,7 +27,8 @@ ValueCaptureSession.__init__ in session.py:
   fov_size            = radius_bar_aperture * 2
   bar_width           = fov_size / n_bar_positions
 
-Stimulus grid: 0.2°/pixel → ceil(fov_size / 0.2) ≈ 32 × 32 pixels.
+Stimulus grid: ±5° at 0.1°/pixel (100 × 100); images are 4× supersampled, so a pixel holds
+the fraction covered.
 
 Output (saved to <bids_folder>/derivatives/prf/sub-<sub>/<ses_label>/func/):
   *_desc-prf_params.nii.gz  — 5 volumes (x, y, sd, baseline, amplitude)
@@ -60,7 +73,9 @@ from value_capture.utils.data import Subject, BIDS_FOLDER
 warnings.filterwarnings('ignore')
 
 # ── pixel resolution ──────────────────────────────────────────────────────────
-PIXEL_SIZE_DEG = 0.2   # degrees per pixel
+PIXEL_SIZE_DEG = 0.1   # degrees per pixel (item short side is 0.375°)
+GRID_RADIUS = 5.0      # half-width of the square grid (items reach 4.75°)
+SUPERSAMPLE = 4
 
 # ── derive geometry from default.yml (mirrors session.py) ────────────────────
 _SETTINGS_FILE = (
@@ -83,6 +98,9 @@ def _load_geometry(settings_file=_SETTINGS_FILE):
         n,
     )
     return dict(
+        item_ecc=float(e),
+        item_long=float(s),
+        item_short=float(s / 4.0),        # visual.Rect(width=size, height=size / 4)
         radius=float(radius),
         fov_size=float(fov_size),
         bar_width=float(bar_width),
@@ -92,59 +110,96 @@ def _load_geometry(settings_file=_SETTINGS_FILE):
 
 
 GEOM = _load_geometry()
-GRID_RES = int(np.ceil(GEOM['fov_size'] / PIXEL_SIZE_DEG))   # 32
+GRID_RES = int(round(2 * GRID_RADIUS / PIXEL_SIZE_DEG))   # 100
 
 
 # ── stimulus helpers ──────────────────────────────────────────────────────────
 
-def make_grid_coordinates():
-    """Return (GRID_RES², 2) float32 DataFrame of (x, y) in visual degrees.
+def _axis(n=GRID_RES):
+    """Pixel-centre coordinates (deg) along one axis."""
+    step = 2 * GRID_RADIUS / n
+    return (np.arange(n, dtype=np.float32) + .5) * step - GRID_RADIUS
 
-    Pixel ordering matches make_bar_image().ravel():
-      - x increases left → right
-      - y increases bottom → top
+
+def make_grid_coordinates():
+    """Return (GRID_RES², 2) DataFrame of pixel-centre (x, y) in visual degrees.
+
+    Pixel ordering matches the images' .ravel(): x increases left → right,
+    y increases bottom → top (row index = y).
     """
-    half = GEOM['fov_size'] / 2
-    xs = np.linspace(-half, half, GRID_RES, dtype=np.float32)
-    ys = np.linspace(-half, half, GRID_RES, dtype=np.float32)
-    xx, yy = np.meshgrid(xs, ys)
+    xx, yy = np.meshgrid(_axis(), _axis())
     return pd.DataFrame({'x': xx.ravel(), 'y': yy.ravel()})
 
 
+_FINE = np.meshgrid(_axis(GRID_RES * SUPERSAMPLE), _axis(GRID_RES * SUPERSAMPLE))
+
+
+def _downsample(fine):
+    """Block-average the supersampled image to GRID_RES (fraction of each pixel covered)."""
+    k = SUPERSAMPLE
+    return fine.reshape(GRID_RES, k, GRID_RES, k).mean((1, 3)).astype(np.float32)
+
+
 def make_bar_image(position, orientation):
-    """Return (GRID_RES, GRID_RES) float32 binary bar image.
+    """Bar image (GRID_RES, GRID_RES) inside the bar aperture.
 
-    Parameters
-    ----------
-    position    : float — bar centre in deg (along the axis ⊥ to bar length)
-    orientation : 'horizontal' (bar spans X; positioned on Y-axis)
-                  'vertical'   (bar spans Y; positioned on X-axis)
+    orientation 'horizontal': bar spans x, positioned on y; 'vertical': spans y, positioned on x.
     """
-    half = GEOM['fov_size'] / 2
-    xs = np.linspace(-half, half, GRID_RES, dtype=np.float32)
-    ys = np.linspace(-half, half, GRID_RES, dtype=np.float32)
-    xx, yy = np.meshgrid(xs, ys)
-
+    xx, yy = _FINE
     aperture = (xx ** 2 + yy ** 2) <= GEOM['radius'] ** 2
     hw = GEOM['bar_width'] / 2
-    if orientation == 'horizontal':
-        bar = np.abs(yy - position) <= hw
-    else:
-        bar = np.abs(xx - position) <= hw
-
-    return (bar & aperture).astype(np.float32)
+    bar = (np.abs(yy - position) <= hw) if orientation == 'horizontal' else (np.abs(xx - position) <= hw)
+    return _downsample((bar & aperture).astype(np.float32))
 
 
-def build_paradigm(trials):
-    """Return (n_trials, GRID_RES²) float32 stimulus matrix.
+ITEM_XY = np.array([(GEOM['item_ecc'] * np.cos(np.radians(i * 45.)),
+                     GEOM['item_ecc'] * np.sin(np.radians(i * 45.))) for i in range(8)])
 
-    One row per trial in the same order as the GLMsingle beta volumes.
+
+def make_items_image(target_location, target_orientation):
+    """The 8 search-array rectangles of one trial (experiment/stimuli.py TargetStimulusArray).
+
+    Item ``target_location`` has ``target_orientation`` (0 = long axis horizontal, 90 = vertical);
+    all others have the orthogonal orientation.
     """
-    imgs = [
-        make_bar_image(row.bar_position, row.bar_orientation).ravel()
-        for _, row in trials.iterrows()
-    ]
+    xx, yy = _FINE
+    img = np.zeros_like(xx, dtype=bool)
+    other = 90. if float(target_orientation) == 0. else 0.
+    for i, (cx, cy) in enumerate(ITEM_XY):
+        ori = float(target_orientation) if i == int(target_location) else other
+        hx, hy = ((GEOM['item_long'] / 2, GEOM['item_short'] / 2) if ori == 0.
+                  else (GEOM['item_short'] / 2, GEOM['item_long'] / 2))
+        img |= (np.abs(xx - cx) <= hx) & (np.abs(yy - cy) <= hy)
+    return _downsample(img.astype(np.float32))
+
+
+def build_paradigm(trials, paradigm='bar_items'):
+    """Return (n_trials, GRID_RES²) float32 stimulus matrix, one row per GLMsingle beta.
+
+    paradigm 'bar': bar only (the pre-2026-11-17 model, but on the ±5° grid);
+    'bar_items': bar + the 8 search items (needs target_location / target_orientation).
+    """
+    imgs = []
+    for _, row in trials.iterrows():
+        img = make_bar_image(row.bar_position, row.bar_orientation)
+        if paradigm == 'bar_items':
+            img = np.maximum(img, make_items_image(row.target_location, row.target_orientation))
+        imgs.append(img.ravel())
     return np.array(imgs, dtype=np.float32)
+
+
+def add_item_info(sub, trials):
+    """Add target_location / target_orientation from the raw events (matched on session, run, trial_nr)."""
+    rows = []
+    for (ses, run), _ in trials.groupby(['session', 'run']):
+        ev = sub.get_onsets(int(ses), int(run))
+        ev = ev[ev['event_type'] == 'target'][['trial_nr', 'target_location', 'target_orientation']]
+        rows.append(ev.drop_duplicates('trial_nr').assign(session=ses, run=run))
+    info = pd.concat(rows)
+    out = trials.merge(info, on=['session', 'run', 'trial_nr'], how='left', validate='one_to_one')
+    assert len(out) == len(trials) and out[['target_location', 'target_orientation']].notna().all().all(), \
+        'target_location / target_orientation missing for some trials'
+    return out
 
 
 def save_param_nifti(arr, mask_img, path):
@@ -194,7 +249,7 @@ def _get_gm_mask(sub, session, bids_folder, threshold):
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
          gm_threshold=None, gd_iterations=1000, glmsingle_deriv='glmsingle',
-         voxel_chunk_size=5000, learning_rate=0.01):
+         voxel_chunk_size=5000, learning_rate=0.01, paradigm='bar_items'):
 
     sub = Subject(subject, bids_folder=bids_folder)
     if sessions is None:
@@ -214,6 +269,8 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
         f'{betas_img.shape[3]} beta volumes'
     )
     print(f'  {len(trials)} trials loaded')
+    if paradigm == 'bar_items':
+        trials = add_item_info(sub, trials)
 
     # ── brain / gray-matter mask ──────────────────────────────────────────────
     if gm_threshold is not None:
@@ -238,7 +295,8 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
 
     # ── build stimulus paradigm ───────────────────────────────────────────────
     grid_coords = make_grid_coordinates()
-    paradigm_arr = build_paradigm(trials)          # (n_trials, GRID_RES²)
+    paradigm_arr = build_paradigm(trials, paradigm)   # (n_trials, GRID_RES²)
+    print(f'  Paradigm: {paradigm}, mean coverage per trial {paradigm_arr.sum(1).mean() * PIXEL_SIZE_DEG ** 2:.2f} deg²')
     paradigm_df = pd.DataFrame(paradigm_arr)
     paradigm_df.index.name = 'frame'
 
@@ -254,10 +312,10 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     par_fitter = ParameterFitter(model=model, data=data_df, paradigm=paradigm_df)
 
     # ── coarse grid search (correlation cost → amplitude/baseline-free) ───────
-    r = GEOM['radius'] * 0.9
-    x_grid = np.linspace(-r, r, 10, dtype=np.float32)
-    y_grid = np.linspace(-r, r, 10, dtype=np.float32)
-    sd_grid = np.linspace(0.1, GEOM['radius'], 10, dtype=np.float32)
+    r = GRID_RADIUS * 0.9          # include the item ring (4°), not only the bar aperture
+    x_grid = np.linspace(-r, r, 13, dtype=np.float32)
+    y_grid = np.linspace(-r, r, 13, dtype=np.float32)
+    sd_grid = np.geomspace(0.1, 3.0, 10).astype(np.float32)
 
     print('  Grid search...')
     pars_grid = par_fitter.fit_grid(
@@ -310,7 +368,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     # ── save ──────────────────────────────────────────────────────────────────
     # Put results under prf/<glmsingle_deriv>/ so smoothed and unsmoothed
     # fits live in separate directories.
-    prf_deriv = f'prf_{glmsingle_deriv}'
+    prf_deriv = f'prf_{glmsingle_deriv}' + ('_items' if paradigm == 'bar_items' else '')
     out_dir = (
         Path(bids_folder) / 'derivatives' / prf_deriv
         / f'sub-{subject}' / ses_label / 'func'
@@ -379,6 +437,9 @@ if __name__ == '__main__':
                              'Reduce if GPU runs out of memory; increase for speed on large GPUs.')
     parser.add_argument('--learning-rate', type=float, default=0.01,
                         help='Adam learning rate for gradient descent (default: 0.01).')
+    parser.add_argument('--paradigm', choices=['bar_items', 'bar'], default='bar_items',
+                        help='bar_items (default): bar + the 8 search items, output prf_<deriv>_items; '
+                             'bar: bar only, output prf_<deriv>.')
     args = parser.parse_args()
 
     main(
@@ -390,4 +451,5 @@ if __name__ == '__main__':
         glmsingle_deriv=args.glmsingle_deriv,
         voxel_chunk_size=args.voxel_chunk_size,
         learning_rate=args.learning_rate,
+        paradigm=args.paradigm,
     )

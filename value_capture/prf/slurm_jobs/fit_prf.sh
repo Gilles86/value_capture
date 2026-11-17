@@ -7,7 +7,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=A100
 #SBATCH --mem=32G
-#SBATCH --time=02:00:00
+#SBATCH --time=03:00:00
 
 # Fit GaussianPRF2D model to GLMsingle single-trial betas.
 #
@@ -27,7 +27,8 @@ SESSION="${SESSION:-}"
 GM_THRESHOLD="${GM_THRESHOLD:-0.1}"   # liberal: keeps ~all cortex incl. sulcal depths
 GD_ITERATIONS="${GD_ITERATIONS:-1000}"
 GLMSINGLE_DERIV="${GLMSINGLE_DERIV:-glmsingle}"
-VOXEL_CHUNK_SIZE="${VOXEL_CHUNK_SIZE:-25000}"  # A100 40GB handles 25k voxels easily
+VOXEL_CHUNK_SIZE=""  # A100 40GB handles 25k voxels easily (10k-pixel grid: ~1 GB per chunk)
+PARADIGM=""   # bar + search items on a ±5° grid -> prf_<deriv>_items
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
 REPO=$HOME/git/value_capture
