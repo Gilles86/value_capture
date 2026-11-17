@@ -323,46 +323,57 @@ def main_figure(d, render_dir, subject, view, out):
     print('wrote', out.with_suffix('.pdf'))
 
 
-def supplement(d, render_dir, subjects, view, out):
-    """Every subject on one page: maps + PRF centres in the visual field."""
+def supplement(d, render_dir, subjects, view, out, rh=.72):
+    """Every subject on one page: maps + PRF centres in the visual field. Laid out in inches so the renders sit
+    edge to edge (the figure is as wide as its content)."""
     n = len(subjects)
-    fig = plt.figure(figsize=(7.2, 9.6))
-    gs = fig.add_gridspec(n + 1, 5, width_ratios=[1, 1, 1, 1, .62], height_ratios=[1] * n + [.45],
-                          left=.05, right=.99, top=.975, bottom=.05, hspace=.04, wspace=.03)
     box = crop_box([render_dir / f'sub-{s:02d}_{p}_{view}.png' for s in subjects for p, _ in MAPS])
+    mw = rh * (box[3] - box[2]) / (box[1] - box[0])        # map width at row height rh
+    cw, lm, top_m, key_h = rh * 1.05, .38, .22, .62
+    W = lm + 4 * mw + .08 + cw + .05
+    H = top_m + n * rh + key_h + .2
+    fig = plt.figure(figsize=(W, H))
+    at = lambda x, y, w, h: fig.add_axes([x / W, y / H, w / W, h / H])  # noqa: E731
     g = good(d)
     for i, s in enumerate(subjects):
-        row = []
+        y = H - top_m - (i + 1) * rh
         for j, (p, title) in enumerate(MAPS):
-            ax = fig.add_subplot(gs[i, j])
+            ax = at(lm + j * mw, y, mw, rh)
             show(ax, render_dir / f'sub-{s:02d}_{p}_{view}.png', box)
             if i == 0:
-                ax.set_title(title, color=FG, pad=2)
-            row.append(ax)
+                ax.set_title(title, color=FG, pad=2, fontsize=7)
         x = g[g.subject == f'{s:02d}']
-        row[0].text(-.04, .5, f'sub-{s:02d}\n{len(x)} vertices', transform=row[0].transAxes, rotation=90,
-                    ha='right', va='center', fontsize=6, color=FG, linespacing=1.1)
-        ax = fig.add_subplot(gs[i, 4])
-        ax.scatter(x.x, x.y, s=.3, c=x.roi.map(ROI_COLORS), lw=0, alpha=.5, rasterized=True)
+        fig.text((lm - .04) / W, (y + rh / 2) / H, f'sub-{s:02d}\n{len(x)} vert.', rotation=90, ha='right',
+                 va='center', fontsize=6.3, color=FG, linespacing=1.1)
+        ax = at(lm + 4 * mw + .08, y + .02, cw, rh - .04)
+        ax.scatter(x.x, x.y, s=.35, c=x.roi.map(ROI_COLORS), lw=0, alpha=.55, rasterized=True)
         draw_display(ax, lw=.35, color=FG)
         ax.set_xlim(-5, 5)
         ax.set_ylim(-5, 5)
         ax.set_aspect('equal')
         ax.set_axis_off()
         if i == 0:
-            ax.set_title('PRF centres', color=FG, pad=2)
-    keys = [fig.add_subplot(gs[n, j]) for j in range(4)]
-    for k in keys:
-        k.set_axis_off()
-    for k in keys:
-        k.set_ylim(0, 1)
-    map_keys(keys)
-    fig.text(.05, .003, f'Colour fades in from R² = .05 to .20; maps other than R² within {ECC_MAX:.0f}°. '
-             f'PRF centres: vertices with R² ≥ {R2_MIN:.1f}, coloured by visual area; '
-             'outline: bar aperture and search items.', fontsize=5.5, color='.4')
+            ax.set_title('PRF centres', color=FG, pad=2, fontsize=7)
+    # keys under the columns
+    yk = .2
+    ax = at(lm, yk, mw, key_h)
+    ax.set_axis_off()
+    for k, roi in enumerate(ROI_ORDER):
+        ax.text((k % 2) * .5 + .08, .9 - (k // 2) * .24, roi, transform=ax.transAxes, color=ROI_COLORS[roi],
+                fontsize=6.5, weight='bold', va='top')
+    angle_key(at(lm + mw + mw / 2 - key_h * .45, yk + .05, key_h * .9, key_h * .9))
+    colorbar(at(lm + 2 * mw + .1, yk + key_h * .6, mw - .2, .07), 'nipy_spectral', 0, 5, 'Eccentricity (°)',
+             [0, 2.5, 5])
+    colorbar(at(lm + 3 * mw + .1, yk + key_h * .6, mw - .2, .07), 'inferno', 0, .6, 'R²', [0, .3, .6])
+    ax = at(lm + 4 * mw + .08, yk, cw, key_h)
+    ax.set_axis_off()
+    ax.text(.0, .8, f'R² ≥ {R2_MIN:.1f},\ncoloured by area;\noutline: bar aperture\nand search items',
+            transform=ax.transAxes, fontsize=5.8, color='.35', va='top', linespacing=1.15)
+    fig.text(lm / W, .04 / H, f'Colour on the maps fades in from R² = .05 to .20; maps other than R² within '
+             f'{ECC_MAX:.0f}°. vert.: vertices with R² ≥ {R2_MIN:.1f} in V1–V3AB.', fontsize=5.8, color='.4')
     fig.savefig(out.with_suffix('.pdf'), dpi=300)
     fig.savefig(out.with_suffix('.png'), dpi=200)
-    print('wrote', out.with_suffix('.pdf'))
+    print('wrote', out.with_suffix('.pdf'), f'({W:.2f} x {H:.2f} in)')
 
 
 if __name__ == '__main__':
