@@ -77,7 +77,11 @@ IMAGE_SIZE = (2400, 1800)
 # Colours: paper_style.ROI_COLORS (Fig. 2 only: early blues, dorsal greens, occipitotemporal warm hues).
 AREA_COLORS = {'V1': ((1,), '#08519C'), 'V2': ((2,), '#3182BD'), 'V3': ((3,), '#7FB8E0'),
                'hV4': ((4,), '#C2185B'), 'VO': ((5, 6), '#E8590C'), 'LO': ((7, 8), '#F2A60D'),
-               'TO': ((9, 10), '#B04FB5'), 'V3AB': ((11, 12), '#1A7F3C')}
+               'TO': ((9, 10), '#B04FB5'), 'V3AB': ((11, 12), '#1A7F3C'),
+               'IPS': ((101,), '#7BC77E'), 'FEF': ((102,), '#1F2933')}
+# Wang 2015 labels (prf/slurm_jobs/wang_atlas.sh) added where neuropythy has no area, as in retsupp:
+# IPS0-5 -> IPS, FEF -> FEF. Codes as in AREA_COLORS.
+WANG = {101: (18, 19, 20, 21, 22, 23), 102: (25,)}
 
 
 def theta_value(theta, hemi):
@@ -103,7 +107,14 @@ def gii(subject, par, hemi):
 
 def read_areas(subject, h):
     surf = FS / f'sub-{subject:02d}_ses-1' / 'surf'
-    return np.round(read_morph_data(surf / f'{h}.inferred_varea')).astype(int)
+    va = np.round(read_morph_data(surf / f'{h}.inferred_varea')).astype(int)
+    wfn = surf / f'{h}.wang15_mplbl.mgz'
+    if wfn.exists():
+        wang = np.round(np.asarray(nib.load(wfn).dataobj).squeeze()).astype(int)
+        tri = nib.freesurfer.read_geometry(surf / f'{h}.inflated')[1]
+        for code, labels in WANG.items():
+            va[(va == 0) & despeckle(np.isin(wang, labels), tri)] = code
+    return va
 
 
 def despeckle(mask, tri, n_iter=8, threshold=.3):

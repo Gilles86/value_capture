@@ -33,12 +33,12 @@ mpl.rcParams.update({
     'ytick.major.size': 3, 'xtick.major.width': .8, 'ytick.major.width': .8, 'lines.linewidth': 1.2,
     'pdf.fonttype': 42, 'savefig.dpi': 300, 'savefig.bbox': 'tight', 'savefig.pad_inches': .03})
 FG, MUTED = '#1F2933', '#9AA5B1'
-ROI_ORDER = ['V1', 'V2', 'V3', 'hV4', 'VO', 'LO', 'TO', 'V3AB']
+ROI_ORDER = ['V1', 'V2', 'V3', 'hV4', 'VO', 'LO', 'TO', 'V3AB', 'IPS', 'FEF']
 ROI_COLORS = {'V1': '#08519C', 'V2': '#3182BD', 'V3': '#7FB8E0', 'hV4': '#C2185B', 'VO': '#E8590C',
-              'LO': '#F2A60D', 'TO': '#B04FB5', 'V3AB': '#1A7F3C'}     # = render_prf_inflated.AREA_COLORS
-ROI_X = dict(zip(ROI_ORDER, [0, 1, 2, 3.4, 4.4, 5.4, 6.4, 7.8]))       # gaps between early / ventral+lateral / dorsal
+              'LO': '#F2A60D', 'TO': '#B04FB5', 'V3AB': '#1A7F3C', 'IPS': '#7BC77E', 'FEF': '#1F2933'}     # = render_prf_inflated.AREA_COLORS
+ROI_X = dict(zip(ROI_ORDER, [0, 1, 2, 3.4, 4.4, 5.4, 6.4, 7.8, 8.8, 9.8]))       # gaps between early / ventral+lateral / dorsal
 PATHWAYS = {'Early (V1–V3)': ('V1', 'V2', 'V3'), 'Ventral (hV4, VO)': ('hV4', 'VO'),
-            'Lateral (LO, TO)': ('LO', 'TO'), 'Dorsal (V3AB)': ('V3AB',)}
+            'Lateral (LO, TO)': ('LO', 'TO'), 'Dorsal (V3AB, IPS)': ('V3AB', 'IPS')}
 R2_MIN = .1
 APERTURE = 3.17                       # bar aperture radius (deg)
 ITEM_ECC, ITEM_LONG, ITEM_SHORT = 4.0, 1.5, .375
@@ -60,7 +60,7 @@ def roi_axis(ax):
     ax.set_xticklabels(ROI_ORDER, rotation=0)
     for t, r in zip(ax.get_xticklabels(), ROI_ORDER):
         t.set_color(ROI_COLORS[r])
-    ax.set_xlim(-.6, ROI_X['V3AB'] + .6)
+    ax.set_xlim(-.6, ROI_X[ROI_ORDER[-1]] + .6)
 
 
 def load(tsv):
@@ -130,7 +130,7 @@ def map_keys(axes, top=True):
     """Keys under (or over) a row of map axes: areas, angle wheel, eccentricity and R² bars."""
     names = ROI_ORDER
     for k, roi in enumerate(names):
-        axes[0].text(.03 + (k % 4) * .245, -.04 - (k // 4) * .13, roi, transform=axes[0].transAxes,
+        axes[0].text(.03 + (k % 5) * .2, -.04 - (k // 5) * .13, roi, transform=axes[0].transAxes,
                      color=ROI_COLORS[roi], fontsize=6.3, weight='bold', va='top')
     angle_key(axes[1].inset_axes([.36, -.36, .28, .32]))
     colorbar(axes[2].inset_axes([.15, -.1, .7, .06]), 'nipy_spectral', 0, 5, 'Eccentricity (°)', [0, 2.5, 5])

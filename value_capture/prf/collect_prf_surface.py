@@ -16,7 +16,8 @@ import pandas as pd
 from nibabel.freesurfer import read_morph_data
 
 ROIS = {1: 'V1', 2: 'V2', 3: 'V3', 4: 'hV4', 5: 'VO', 6: 'VO', 7: 'LO', 8: 'LO', 9: 'TO', 10: 'TO',
-        11: 'V3AB', 12: 'V3AB'}
+        11: 'V3AB', 12: 'V3AB', 101: 'IPS', 102: 'FEF'}
+WANG = {101: (18, 19, 20, 21, 22, 23), 102: (25,)}   # Wang 2015 IPS0-5, FEF where neuropythy has no area
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--bids-folder', default='/shares/zne.uzh/gdehol/ds-valuecapture')
@@ -38,8 +39,12 @@ def gii(deriv, s, hemi, par):
 rows = []
 for s in a.subjects:
     for h, H in (('lh', 'L'), ('rh', 'R')):
-        va = np.round(read_morph_data(d / 'fmriprep' / 'sourcedata' / 'freesurfer' / f'sub-{s}_ses-1' / 'surf'
-                                      / f'{h}.inferred_varea')).astype(int)
+        surf = d / 'fmriprep' / 'sourcedata' / 'freesurfer' / f'sub-{s}_ses-1' / 'surf'
+        va = np.round(read_morph_data(surf / f'{h}.inferred_varea')).astype(int)
+        if (surf / f'{h}.wang15_mplbl.mgz').exists():
+            wang = np.round(np.asarray(nib.load(surf / f'{h}.wang15_mplbl.mgz').dataobj).squeeze()).astype(int)
+            for code, labels in WANG.items():
+                va[(va == 0) & np.isin(wang, labels)] = code
         t = pd.DataFrame({p: gii(a.prf_deriv, s, H, p) for p in ('x', 'y', 'sd', 'amplitude', 'R2')})
         t['r2_bar'] = gii(a.bar_deriv, s, H, 'R2')
         t = t.rename(columns={'R2': 'r2'}).assign(subject=s, hemi=H, vertex=np.arange(len(t)), varea=va)
