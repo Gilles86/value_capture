@@ -220,6 +220,22 @@ def panel_gain(ax, d):
     roi_axis(ax)
 
 
+def panel_r2(ax, d):
+    """Median R² per ROI and subject (vertices with R² >= R2_MIN), when there is no second fit to compare."""
+    t = good(d).groupby(['subject', 'roi']).agg(r2=('r2', 'median'), n=('r2', 'size')).reset_index().query('n >= 10')
+    for i, roi in enumerate(ROI_ORDER):
+        p = t[t.roi == roi].r2.to_numpy()
+        rng = np.random.default_rng(20 + i)
+        ax.scatter(ROI_X[roi] + rng.uniform(-.2, .2, len(p)), p, s=6, color=ROI_COLORS[roi], alpha=.65, lw=0)
+        if len(p):
+            ax.plot([ROI_X[roi] - .3, ROI_X[roi] + .3], [np.median(p)] * 2, color=FG, lw=1.4,
+                    solid_capstyle='butt')
+    ax.set_ylim(0, None)
+    ax.set_ylabel(f'Median R² (vertices ≥ {R2_MIN:.1f})')
+    offset(ax)
+    roi_axis(ax)
+
+
 def draw_display(ax, lw=.6, color=FG):
     """The 8 search items (drawn with orientations of one example trial) and the bar aperture."""
     ax.add_patch(Circle((0, 0), APERTURE, fill=False, ec=color, lw=lw * .8, ls=(0, (2, 1.5))))
@@ -289,8 +305,12 @@ def main_figure(d, render_dir, subject, view, out):
     ax.set_title('PRFs grow with eccentricity', loc='left', color=FG, pad=10)
     letter(ax, 'c', x=-.3, y=1.1)
     ax = fig.add_subplot(mid[2])
-    panel_gain(ax, d)
-    ax.set_title('The search items explain extra variance', loc='left', color=FG, pad=10)
+    if np.allclose(d.r2, d.r2_bar):      # bar-only fits: nothing to compare yet
+        panel_r2(ax, d)
+        ax.set_title('Variance explained per area', loc='left', color=FG, pad=10)
+    else:
+        panel_gain(ax, d)
+        ax.set_title('The search items explain extra variance', loc='left', color=FG, pad=10)
     letter(ax, 'd', x=-.22, y=1.1)
 
     low = fig.add_gridspec(1, 1, left=.08, right=.98, top=.24, bottom=.04)
@@ -354,11 +374,12 @@ if __name__ == '__main__':
     ap.add_argument('--view', default='occipital')
     ap.add_argument('--supp-view', default='occipital')
     ap.add_argument('--out-dir', default=str(ROOT / 'notes/figures'))
+    ap.add_argument('--suffix', default='', help='appended to the output names, e.g. _baronly')
     a = ap.parse_args()
     d = load(a.tsv)
     rd = Path(a.render_dir)
-    main_figure(d, rd, a.subject, a.view, Path(a.out_dir) / 'prf_validation')
-    supplement(d, rd, a.subjects, a.supp_view, Path(a.out_dir) / 'prf_validation_subjects')
+    main_figure(d, rd, a.subject, a.view, Path(a.out_dir) / f'prf_validation{a.suffix}')
+    supplement(d, rd, a.subjects, a.supp_view, Path(a.out_dir) / f'prf_validation_subjects{a.suffix}')
     s = good(d).groupby(['subject', 'roi']).size().unstack().reindex(columns=ROI_ORDER)
     print('vertices with R² >= .1 per subject x ROI\n', s.fillna(0).astype(int))
     t = r2_gain(d).assign(gain=lambda x: x['items'] - x['bar'])
