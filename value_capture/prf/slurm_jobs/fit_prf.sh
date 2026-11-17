@@ -28,7 +28,7 @@ GM_THRESHOLD="${GM_THRESHOLD:-0.1}"   # liberal: keeps ~all cortex incl. sulcal 
 GD_ITERATIONS="${GD_ITERATIONS:-1000}"
 GLMSINGLE_DERIV="${GLMSINGLE_DERIV:-glmsingle}"
 VOXEL_CHUNK_SIZE=""  # A100 40GB handles 25k voxels easily (10k-pixel grid: ~1 GB per chunk)
-PARADIGM=""   # bar + search items on a ±5° grid -> prf_<deriv>_items
+PARADIGM="${PARADIGM:-bar_items}"   # bar + search items on a ±5° grid -> prf_<deriv>_items
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
 REPO=$HOME/git/value_capture
@@ -38,6 +38,7 @@ ARGS=(
     --bids-folder "$BIDS_FOLDER"
     --gd-iterations "$GD_ITERATIONS"
     --glmsingle-deriv "$GLMSINGLE_DERIV"
+    --paradigm "$PARADIGM"
 )
 
 [ -n "$SESSION" ]          && ARGS+=(--sessions $SESSION)

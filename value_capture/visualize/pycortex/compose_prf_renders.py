@@ -40,6 +40,8 @@ def render_constants():
 C = render_constants()
 TITLES = {'areas': 'Visual areas', 'angle': 'Polar angle', 'ecc': 'Eccentricity',
           'sd': 'PRF size (σ)', 'r2': 'Variance explained'}
+VIEW_LABELS = {'occipital': 'Posterior-ventral', 'pole2': 'Posterior', 'ventral': 'Ventral',
+               'pole': 'Posterior', 'medial': 'Medial'}
 UNITS = {'ecc': '°', 'sd': '°', 'r2': 'R²'}
 
 
@@ -127,9 +129,10 @@ def subject_figure(render_dir, subject, pars, views, out):
                 ax.set_title(TITLES[p], fontsize=7.5, color='w', pad=3)
         key(axes[-1, j], p)
     for i, v in enumerate(views):
-        axes[i, 0].text(-.04, .5, v.capitalize(), transform=axes[i, 0].transAxes, rotation=90,
+        axes[i, 0].text(-.04, .5, VIEW_LABELS.get(v, v.capitalize()), transform=axes[i, 0].transAxes, rotation=90,
                         ha='right', va='center', fontsize=7)
-    fig.suptitle(f'sub-{subject:02d}', x=.01, ha='left', fontsize=8, color='w', y=.995)
+    axes[0, 0].text(-.12, 1.13, f'sub-{subject:02d}', transform=axes[0, 0].transAxes, fontsize=8.5,
+                    weight='bold', va='bottom')
     note = (f'Colour fades in from R² = {C["R2_RAMP"][0]:.2f} to {C["R2_RAMP"][1]:.2f}; '
             f'maps other than R² only within {C["ECC_MAX_SHOWN"]:.1f}° (stimulus aperture). '
             'White lines: neuropythy area borders.')
@@ -156,7 +159,7 @@ def cohort_sheet(render_dir, subjects, par, view, out, ncol=4):
             ax.imshow(load_cropped(f, box))
         ax.text(.03, .97, f'sub-{s:02d}', transform=ax.transAxes, va='top', fontsize=6.5)
     key(axes[-1, 0], par)
-    fig.suptitle(f'{TITLES[par]} ({view} view)', x=.01, ha='left', fontsize=8, color='w', y=.995)
+    fig.suptitle(f'{TITLES[par]} ({VIEW_LABELS.get(view, view).lower()} view)', x=.01, ha='left', fontsize=8, color='w', y=.995)
     fig.savefig(out, dpi=300, bbox_inches='tight', pad_inches=.04)
     plt.close(fig)
     print('wrote', out)
@@ -167,7 +170,7 @@ if __name__ == '__main__':
     ap.add_argument('--render-dir', default='notes/figures/prf_inflated')
     ap.add_argument('--subjects', nargs='+', type=int, default=list(range(4, 16)))
     ap.add_argument('--pars', nargs='+', default=['areas', 'angle', 'ecc', 'sd', 'r2'])
-    ap.add_argument('--views', nargs='+', default=['pole', 'medial'])
+    ap.add_argument('--views', nargs='+', default=['occipital', 'pole2', 'ventral'])
     a = ap.parse_args()
     rd = Path(a.render_dir)
     for s in a.subjects:
