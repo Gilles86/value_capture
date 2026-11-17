@@ -93,50 +93,57 @@ def strip(ax, d, color, label, lim, word, alt, seed=0):
     ax.spines['bottom'].set_position(('outward', 2))
 
 
-df = pd.read_csv(ROOT / 'notes/data/behavior_trials_main.tsv', sep='\t', dtype={'subject': str})
-df['correct'] = df['correct'].map({True: 1., False: 0., 'True': 1., 'False': 0.})
-n = df.subject.nunique()
-rt = (df[df.correct == 1].groupby(['subject', 'cond']).rt.mean() * 1000).unstack()[ORDER]
-acc = (df.groupby(['subject', 'cond']).correct.mean() * 100).unstack()[ORDER]
+def load_behaviour():
+    df = pd.read_csv(ROOT / 'notes/data/behavior_trials_main.tsv', sep='\t', dtype={'subject': str})
+    df['correct'] = df['correct'].map({True: 1., False: 0., 'True': 1., 'False': 0.})
+    return df
 
-W, H = 7.09, 2.35
-fig = plt.figure(figsize=(W, H))
-at = lambda x, y, w, h: fig.add_axes([x / W, y / H, w / W, h / H])  # noqa: E731 (inches)
-Y0, PH = .45, 1.25
 
-ax_a = at(.45, Y0, 1.45, PH)
-cond_panel(ax_a, rt, (700, 1050), [700, 800, 900, 1000],
-           [('low', 'none', 'greater'), ('high', 'none', 'greater'), ('high', 'low', 'greater')], 'ms')
-ax_a.set_ylabel('Response time (ms)')
+if __name__ == '__main__':
+    df = pd.read_csv(ROOT / 'notes/data/behavior_trials_main.tsv', sep='\t', dtype={'subject': str})
+    df['correct'] = df['correct'].map({True: 1., False: 0., 'True': 1., 'False': 0.})
+    n = df.subject.nunique()
+    rt = (df[df.correct == 1].groupby(['subject', 'cond']).rt.mean() * 1000).unstack()[ORDER]
+    acc = (df.groupby(['subject', 'cond']).correct.mean() * 100).unstack()[ORDER]
 
-x0, SW, SH = 2.55, 1.55, .2
-for k, (lab, d, c, word, alt) in enumerate([
-        ('Low − absent', rt.low - rt.none, COL['low'], 'slower', 'greater'),
-        ('High − absent', rt.high - rt.none, COL['high'], 'slower', 'greater'),
-        ('High − low', rt.high - rt.low, COL['high'], 'slower', 'greater')]):
-    s = at(x0, Y0 + PH - .3 - k * .5, SW, SH)
-    strip(s, d, c, lab, (-60, 110), word, alt, seed=k)
-    s.set_xticks([-50, 0, 50, 100])
-    if k < 2:
-        s.set_xticklabels([])
-    else:
-        s.set_xlabel('RT difference (ms)', labelpad=1)
-fig.text((x0 + SW / 2) / W, (Y0 + PH + .12) / H, 'Within subject', fontsize=6.5, color='.4', ha='center')
+    W, H = 7.09, 2.35
+    fig = plt.figure(figsize=(W, H))
+    at = lambda x, y, w, h: fig.add_axes([x / W, y / H, w / W, h / H])  # noqa: E731 (inches)
+    Y0, PH = .45, 1.25
 
-ax_c = at(4.75, Y0, 1.45, PH)
-cond_panel(ax_c, acc, (85, 100), [85, 90, 95, 100],
-           [('low', 'none', 'less'), ('high', 'none', 'less'), ('high', 'low', 'less')], '%')
-ax_c.set_ylabel('Accuracy (% correct)')
+    ax_a = at(.45, Y0, 1.45, PH)
+    cond_panel(ax_a, rt, (700, 1050), [700, 800, 900, 1000],
+               [('low', 'none', 'greater'), ('high', 'none', 'greater'), ('high', 'low', 'greater')], 'ms')
+    ax_a.set_ylabel('Response time (ms)')
 
-for a, l, x in ((ax_a, 'a', -.42), (ax_c, 'c', -.42)):
-    a.text(x, 1.45, l, transform=a.transAxes, fontsize=8, weight='bold', va='bottom')
-fig.text((x0 - .25) / W, (Y0 + PH + .12) / H + .0, 'b', fontsize=8, weight='bold')
-out = ROOT / 'notes/figures/behavior_share'
-fig.savefig(f'{out}.pdf')
-fig.savefig(f'{out}.png', dpi=300)
-print(f"""Caption: Value-driven capture, main study (n = {n}, sub-04–15). a, Response time on correct trials when the
-colour-singleton distractor signalled low or high reward, or no distractor was present. Dots: subjects (triangles:
-beyond the axis); large points and bars: mean ± within-subject SEM (Cousineau–Morey). Brackets: mean within-subject
-difference, one-sided paired t-test (distractor slower; high slower than low; * p < .05, ** p < .01, *** p < .001).
-b, Within-subject RT differences: dots subjects, diamond mean, bar bootstrapped 95% CI; counts: subjects in the
-predicted direction. c, Accuracy, as a (one-sided: distractor and high value lower).""")
+    x0, SW, SH = 2.55, 1.55, .2
+    for k, (lab, d, c, word, alt) in enumerate([
+            ('Low − absent', rt.low - rt.none, COL['low'], 'slower', 'greater'),
+            ('High − absent', rt.high - rt.none, COL['high'], 'slower', 'greater'),
+            ('High − low', rt.high - rt.low, COL['high'], 'slower', 'greater')]):
+        s = at(x0, Y0 + PH - .3 - k * .5, SW, SH)
+        strip(s, d, c, lab, (-60, 110), word, alt, seed=k)
+        s.set_xticks([-50, 0, 50, 100])
+        if k < 2:
+            s.set_xticklabels([])
+        else:
+            s.set_xlabel('RT difference (ms)', labelpad=1)
+    fig.text((x0 + SW / 2) / W, (Y0 + PH + .12) / H, 'Within subject', fontsize=6.5, color='.4', ha='center')
+
+    ax_c = at(4.75, Y0, 1.45, PH)
+    cond_panel(ax_c, acc, (85, 100), [85, 90, 95, 100],
+               [('low', 'none', 'less'), ('high', 'none', 'less'), ('high', 'low', 'less')], '%')
+    ax_c.set_ylabel('Accuracy (% correct)')
+
+    for a, l, x in ((ax_a, 'a', -.42), (ax_c, 'c', -.42)):
+        a.text(x, 1.45, l, transform=a.transAxes, fontsize=8, weight='bold', va='bottom')
+    fig.text((x0 - .25) / W, (Y0 + PH + .12) / H + .0, 'b', fontsize=8, weight='bold')
+    out = ROOT / 'notes/figures/behavior_share'
+    fig.savefig(f'{out}.pdf')
+    fig.savefig(f'{out}.png', dpi=300)
+    print(f"""Caption: Value-driven capture, main study (n = {n}, sub-04–15). a, Response time on correct trials when the
+    colour-singleton distractor signalled low or high reward, or no distractor was present. Dots: subjects (triangles:
+    beyond the axis); large points and bars: mean ± within-subject SEM (Cousineau–Morey). Brackets: mean within-subject
+    difference, one-sided paired t-test (distractor slower; high slower than low; * p < .05, ** p < .01, *** p < .001).
+    b, Within-subject RT differences: dots subjects, diamond mean, bar bootstrapped 95% CI; counts: subjects in the
+    predicted direction. c, Accuracy, as a (one-sided: distractor and high value lower).""")
