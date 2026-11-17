@@ -8,6 +8,7 @@
 #SBATCH --time=03:00:00
 # Sample the volumetric PRF maps to fsnative and run neuropythy's Bayesian retinotopy
 # (inferred_varea / _angle / _eccen into the FreeSurfer subject's surf/).
+#   PRF_DERIV=prf_glmsingle_items sbatch ... (default); neuropythy outputs in surf/ are overwritten
 #   mkdir -p ~/logs/value_capture && sbatch --array=4-15 value_capture/prf/slurm_jobs/surface_neuropythy.sh
 set -eo pipefail
 SUB=$(printf "%02d" "$SLURM_ARRAY_TASK_ID")
@@ -18,5 +19,6 @@ cd "$HOME/git/value_capture"
 BIDS=/shares/zne.uzh/gdehol/ds-valuecapture
 conda activate value_capture
 export NEUROPYTHY_PYTHON=$HOME/data/conda/envs/retsupp_neuropythy/bin/python   # has java
-python -u value_capture/prf/sample_prf_to_surface.py "$SUB" --bids-folder "$BIDS"
-python -u value_capture/prf/register_retinotopy.py "$SUB" --bids-folder "$BIDS"
+PRF_DERIV="${PRF_DERIV:-prf_glmsingle_items}"   # the bar + search-items fits (2026-11-17)
+python -u value_capture/prf/sample_prf_to_surface.py "$SUB" --bids-folder "$BIDS" --prf-deriv "$PRF_DERIV"
+python -u value_capture/prf/register_retinotopy.py "$SUB" --bids-folder "$BIDS" --prf-deriv "$PRF_DERIV"
