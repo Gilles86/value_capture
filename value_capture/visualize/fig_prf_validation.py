@@ -36,7 +36,7 @@ FG, MUTED = '#1F2933', '#9AA5B1'
 ROI_ORDER = ['V1', 'V2', 'V3', 'hV4', 'VO', 'LO', 'TO', 'V3AB', 'IPS', 'FEF']
 ROI_COLORS = {'V1': '#08519C', 'V2': '#3182BD', 'V3': '#7FB8E0', 'hV4': '#C2185B', 'VO': '#E8590C',
               'LO': '#F2A60D', 'TO': '#B04FB5', 'V3AB': '#1A7F3C', 'IPS': '#7BC77E', 'FEF': '#1F2933'}     # = render_prf_inflated.AREA_COLORS
-ROI_X = dict(zip(ROI_ORDER, [0, 1, 2, 3.4, 4.4, 5.4, 6.4, 7.8, 8.8, 9.8]))       # gaps between early / ventral+lateral / dorsal
+ROI_X = dict(zip(ROI_ORDER, [0, 1, 2, 3.4, 4.4, 5.4, 6.4, 7.8, 9.0, 10.2]))       # gaps between early / ventral+lateral / dorsal
 PATHWAYS = {'Early (V1–V3)': ('V1', 'V2', 'V3'), 'Ventral (hV4, VO)': ('hV4', 'VO'),
             'Lateral (LO, TO)': ('LO', 'TO'), 'Dorsal (V3AB, IPS)': ('V3AB', 'IPS')}
 R2_MIN = .1
@@ -57,7 +57,7 @@ def letter(ax, s, x=-.18, y=1.1):
 
 def roi_axis(ax):
     ax.set_xticks([ROI_X[r] for r in ROI_ORDER])
-    ax.set_xticklabels(ROI_ORDER, rotation=0)
+    ax.set_xticklabels(ROI_ORDER, rotation=0, fontsize=6)
     for t, r in zip(ax.get_xticklabels(), ROI_ORDER):
         t.set_color(ROI_COLORS[r])
     ax.set_xlim(-.6, ROI_X[ROI_ORDER[-1]] + .6)
@@ -84,7 +84,7 @@ def crop_box(paths, margin=6):
         ys, xs = np.flatnonzero(a.any(1)), np.flatnonzero(a.any(0))
         b = [ys[0], ys[-1], xs[0], xs[-1]]
         box = b if box is None else [min(box[0], b[0]), max(box[1], b[1]), min(box[2], b[2]), max(box[3], b[3])]
-    return box[0] - margin, box[1] + margin, box[2] - margin, box[3] + margin
+    return max(box[0] - margin, 0), box[1] + margin, max(box[2] - margin, 0), box[3] + margin
 
 
 def show(ax, path, box):
@@ -281,21 +281,29 @@ def panel_coverage(fig, gs, d):
 # ── figures ───────────────────────────────────────────────────────────────────
 
 def main_figure(d, render_dir, subject, view, out):
-    fig = plt.figure(figsize=(7.2, 7.4))
-    top = fig.add_gridspec(1, 3, left=.02, right=.98, top=.97, bottom=.69, wspace=.03)
-    paths = [render_dir / f'sub-{subject:02d}_{p}_{view}.png' for p, _ in MAPS[:3]]
-    box = crop_box(paths)
+    fig = plt.figure(figsize=(7.2, 8.0))
+    views = [view, 'dorsal']
+    top = fig.add_gridspec(2, 3, left=.06, right=.96, top=.975, bottom=.6, wspace=.03, hspace=.03)
     axes = []
-    for j, (p, title) in enumerate(MAPS[:3]):
-        ax = fig.add_subplot(top[j])
-        show(ax, paths[j], box)
-        ax.set_title(title, color=FG, pad=2)
-        axes.append(ax)
-    axes[0].text(.07, 1.05, f'sub-{subject:02d}', transform=axes[0].transAxes, fontsize=6.5, color='.45', va='bottom')
+    for i, v in enumerate(views):
+        paths = [render_dir / f'sub-{subject:02d}_{p}_{v}.png' for p, _ in MAPS[:3]]
+        box = crop_box([p for p in paths if p.exists()] or paths)
+        for j, (p, title) in enumerate(MAPS[:3]):
+            ax = fig.add_subplot(top[i, j])
+            show(ax, paths[j], box)
+            if i == 0:
+                ax.set_title(title, color=FG, pad=2)
+            if j == 0:
+                ax.text(-.02, .5, {'occipital': 'Posterior-ventral', 'dorsal': 'Dorsal'}.get(v, v), rotation=90,
+                        transform=ax.transAxes, ha='right', va='center', fontsize=6.5, color='.4')
+            if i == 1:
+                axes.append(ax)
+    fig.axes[0].text(.07, 1.05, f'sub-{subject:02d}', transform=fig.axes[0].transAxes, fontsize=6.5, color='.45',
+                     va='bottom')
     map_keys(axes)
-    letter(axes[0], 'a', x=-.02, y=1.04)
+    letter(fig.axes[0], 'a', x=-.06, y=1.04)
 
-    mid = fig.add_gridspec(1, 3, width_ratios=[1, .75, 1], left=.08, right=.98, top=.535, bottom=.375, wspace=.42)
+    mid = fig.add_gridspec(1, 3, width_ratios=[1, .75, 1], left=.08, right=.98, top=.495, bottom=.345, wspace=.42)
     ax = fig.add_subplot(mid[0])
     panel_contra(ax, d)
     ax.set_title('PRFs sit in the contralateral field', loc='left', color=FG, pad=10)
@@ -313,7 +321,7 @@ def main_figure(d, render_dir, subject, view, out):
         ax.set_title('The search items explain extra variance', loc='left', color=FG, pad=10)
     letter(ax, 'd', x=-.22, y=1.1)
 
-    low = fig.add_gridspec(1, 1, left=.08, right=.98, top=.24, bottom=.04)
+    low = fig.add_gridspec(1, 1, left=.08, right=.98, top=.215, bottom=.035)
     first = panel_coverage(fig, low[0], d)
     first.text(0, 1.2, 'PRF centres cover the bar aperture and the search items (red)', transform=first.transAxes,
                fontsize=7, color=FG)
