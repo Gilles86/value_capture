@@ -3,8 +3,11 @@
 Row 1: a, the display of one trial to scale (grey items, one colour-singleton distractor, the flickering bar in
 its aperture); b, the trial timeline, the 20 bar positions and the colour-value mapping per session.
 Row 2: c, response time by distractor (absent, low, high value) with within-subject differences beside it;
-d, capture (distractor − absent) and the value effect (high − low) per block of runs, practice included, in
-both sessions (the mapping reverses in session 2).
+d, accuracy, as c.
+Row 3: e, racing-diffusion model (minimal model): change in the target drift rate with a distractor and with a
+high- vs low-value distractor (posterior mean, 95% HDI, P(effect < 0)); f, its posterior predictive check as a
+delta plot (slowing vs absent per RT quantile); g, capture and value effect per block of runs, practice included,
+in both sessions (the mapping reverses in session 2).
 
 Geometry and timing from experiment/settings/default.yml and experiment/stimuli.py.
 
@@ -193,42 +196,133 @@ def panel_blocks(ax, df):
         ax.spines[s].set_position(('outward', 3))
 
 
+def panel_race(ax):
+    """Group effects on the target drift (% change), minimal race model: scanner runs (filled) and with practice
+    runs (open)."""
+    import arviz as az
+    pct = lambda x: 100 * (np.exp(x) - 1)  # noqa: E731
+    nc = lambda tag: az.from_netcdf(ROOT / f'notes/data/race_{tag}.nc').posterior  # noqa: E731
+    pm, pp = nc('minimal'), nc('minimal_wpractice')
+    rows = [('Distractor\npresent', '#3E4C59', 'beta_dist_mu'), ('High − low\nvalue', COL['high'], 'beta_value')]
+    for i, (lab, c, var) in enumerate(rows):
+        for j, (post, style) in enumerate(((pm, 'f'), (pp, 'o'))):
+            d = post[var].values.ravel()
+            h = pct(az.hdi(d, hdi_prob=.95))
+            y = -(i + j * .28)
+            ax.plot(h, [y, y], color=c, lw=1.4, solid_capstyle='butt')
+            ax.plot(pct(d.mean()), y, 'o', color='w' if style == 'o' else c, mec=c, mew=1.1, ms=4.5, zorder=3)
+            ax.text(1.2, y, f'P(< 0) = {(d < 0).mean():.3f}'.replace('0.', '.'), fontsize=6, color=c, va='center')
+    ax.axvline(0, color='.6', lw=.6, ls='--', zorder=0)
+    ax.set_yticks([-.14, -1.14], [r[0] for r in rows])
+    ax.tick_params(axis='y', length=0)
+    ax.spines['left'].set_visible(False)
+    ax.set_xlim(-14, 12)
+    ax.set_xticks([-10, -5, 0, 5])
+    ax.set_xlabel('Change in target drift rate (%)')
+    ax.set_ylim(-1.7, .65)
+    for j, (lab, style) in enumerate((('Scanner runs', 'f'), ('+ practice runs', 'o'))):
+        yy = 1.1 - j * .09
+        ax.plot([.02, .1], [yy, yy], transform=ax.transAxes, color=FG, lw=1.4, solid_capstyle='butt', clip_on=False)
+        ax.plot(.06, yy, 'o', transform=ax.transAxes, color='w' if style == 'o' else FG, mec=FG, mew=1, ms=3.8,
+                clip_on=False, zorder=4)
+        ax.text(.14, yy, lab, transform=ax.transAxes, fontsize=6.2, va='center', color=FG)
+    ax.spines['bottom'].set_position(('outward', 3))
+
+
+def panel_delta(ax):
+    """Posterior predictive check of the minimal race model: slowing vs absent per correct-RT quantile."""
+    from value_capture.behavior.fit_race_model import load
+    Q = [.1, .3, .5, .7, .9]
+    df = load(1)
+    sim = pd.read_parquet(ROOT / 'notes/data/race_minimal_ppc.parquet')
+
+    def quantiles(d, by):
+        c = d[d.correct == 1]
+        return c.groupby(by + ['subject', 'cond']).rt.quantile(Q).unstack().groupby(by + ['cond']).mean() * 1000
+
+    obs = quantiles(df.assign(k=0), ['k']).droplevel(0)
+    pq = quantiles(sim, ['draw'])
+    base = pq.xs('none', level='cond')
+    ax.axhline(0, color=MUTED, lw=.8, zorder=0)
+    ax.text(.88, 2, 'Absent', color=MUTED, fontsize=6.3, va='bottom', ha='center')
+    for i, c in enumerate(['low', 'high']):
+        band = pq.xs(c, level='cond') - base
+        ax.fill_between(Q, band.quantile(.025), band.quantile(.975), color=COL[c], alpha=.18, lw=0)
+        ax.plot(Q, band.mean(), color=COL[c], lw=1)
+        ax.plot(np.array(Q) + (i - .5) * .02, obs.loc[c] - obs.loc['none'], 'o', color=COL[c], ms=3.6,
+                mec='w', mew=.5, zorder=3)
+    for j, (c, lab) in enumerate((('high', 'High value'), ('low', 'Low value'))):
+        ax.text(.04, .97 - j * .1, lab, transform=ax.transAxes, color=COL[c], fontsize=6.3, va='top')
+    # glyph key: data dot, model line + band
+    ax.add_patch(Rectangle((.04, .7), .1, .06, transform=ax.transAxes, color=MUTED, alpha=.35, lw=0))
+    ax.plot([.04, .14], [.73, .73], transform=ax.transAxes, color=FG, lw=1)
+    ax.text(.17, .73, 'Model', transform=ax.transAxes, fontsize=6.2, va='center')
+    ax.plot(.09, .63, 'o', transform=ax.transAxes, color=FG, ms=3.6, mec='w')
+    ax.text(.17, .63, 'Data', transform=ax.transAxes, fontsize=6.2, va='center')
+    ax.set_xticks(Q, [f'{q:.1f}' for q in Q])
+    ax.set_xlabel('RT quantile (fast to slow)')
+    ax.set_ylabel('Slowing vs absent (ms)')
+    for s_ in ('left', 'bottom'):
+        ax.spines[s_].set_position(('outward', 3))
+
+
 def main():
     df = load_behaviour()
     rt = (df[df.correct == 1].groupby(['subject', 'cond']).rt.mean() * 1000).unstack()[ORDER]
-    W, H = 7.2, 5.0
+    acc = (df.groupby(['subject', 'cond']).correct.mean() * 100).unstack()[ORDER]
+    W, H = 7.2, 7.0
     fig = plt.figure(figsize=(W, H))
     at = lambda x, y, w, h: fig.add_axes([x / W, y / H, w / W, h / H])  # noqa: E731
 
-    ax = at(.05, 2.7, 2.35, 2.25)
+    ax = at(.05, 4.7, 2.35, 2.25)
     panel_display(ax)
     ax.text(0, 1.0, 'a', transform=ax.transAxes, fontsize=8, weight='bold', va='top')
-    ax = at(2.75, 2.75, 4.35, 2.1)
+    ax = at(2.75, 4.75, 4.35, 2.1)
     panel_timeline(fig, ax)
     ax.text(-.04, 1.04, 'b', transform=ax.transAxes, fontsize=8, weight='bold', va='top')
 
-    Y0, PH = .45, 1.45
-    ax_c = at(.5, Y0, 1.35, PH)
+    # row 2: RT and accuracy
+    Y0, PH = 2.75, 1.25
+    ax_c = at(.5, Y0, 1.3, PH)
     cond_panel(ax_c, rt, (700, 1050), [700, 800, 900, 1000],
                [('low', 'none', 'greater'), ('high', 'none', 'greater'), ('high', 'low', 'greater')], 'ms')
     ax_c.set_ylabel('Response time (ms)')
-    ax_c.text(-.45, 1.5, 'c', transform=ax_c.transAxes, fontsize=8, weight='bold', va='bottom')
-    x0, SW, SH = 2.2, 1.3, .2
+    ax_c.text(-.45, 1.55, 'c', transform=ax_c.transAxes, fontsize=8, weight='bold', va='bottom')
+    x0, SW, SH = 2.15, 1.25, .18
     for k, (lab, d, c) in enumerate([('Low − absent', rt.low - rt.none, COL['low']),
                                      ('High − absent', rt.high - rt.none, COL['high']),
                                      ('High − low', rt.high - rt.low, COL['high'])]):
-        s = at(x0, Y0 + PH - .3 - k * .52, SW, SH)
-        strip(s, d, c, lab, (-60, 110), 'slower', 'greater', seed=k)
-        s.set_xticks([-50, 0, 50, 100])
+        s_ = at(x0, Y0 + PH - .28 - k * .47, SW, SH)
+        strip(s_, d, c, lab, (-60, 110), 'slower', 'greater', seed=k)
+        s_.set_xticks([-50, 0, 50, 100])
         if k < 2:
-            s.set_xticklabels([])
+            s_.set_xticklabels([])
         else:
-            s.set_xlabel('RT difference (ms)', labelpad=1)
-    fig.text((x0 + SW / 2) / W, (Y0 + PH + .15) / H, 'Within subject', fontsize=6.5, color='.4', ha='center')
+            s_.set_xlabel('RT difference (ms)', labelpad=1)
+    fig.text((x0 + SW / 2) / W, (Y0 + PH + .12) / H, 'Within subject', fontsize=6.5, color='.4', ha='center')
+    ax_d = at(4.15, Y0, 1.3, PH)
+    cond_panel(ax_d, acc, (85, 100), [85, 90, 95, 100],
+               [('low', 'none', 'less'), ('high', 'none', 'less'), ('high', 'low', 'less')], '%')
+    ax_d.set_ylabel('Accuracy (% correct)')
+    ax_d.text(-.45, 1.55, 'd', transform=ax_d.transAxes, fontsize=8, weight='bold', va='bottom')
+    x1 = 5.75
+    for k, (lab, d, c) in enumerate([('High − low', acc.high - acc.low, COL['high'])]):
+        s_ = at(x1, Y0 + PH - .28, 1.25, SH)
+        strip(s_, d, c, lab, (-8, 6), 'less accurate', 'less', seed=7)
+        s_.set_xlabel('Accuracy difference (%)', labelpad=1)
 
-    ax_d = at(4.25, Y0, 2.85, PH)
-    panel_blocks(ax_d, df)
-    ax_d.text(-.16, 1.5, 'd', transform=ax_d.transAxes, fontsize=8, weight='bold', va='bottom')
+    # row 3: race model, its PPC, blocks
+    Y1, PH1 = .45, 1.3
+    ax_e = at(.85, Y1, 1.35, PH1)
+    panel_race(ax_e)
+    ax_e.text(-.6, 1.18, 'e', transform=ax_e.transAxes, fontsize=8, weight='bold', va='bottom')
+    ax_e.set_title('Racing-diffusion model', fontsize=7, color=FG, loc='left', x=-.55, y=1.2)
+    ax_f = at(2.85, Y1, 1.25, PH1)
+    panel_delta(ax_f)
+    ax_f.text(-.4, 1.18, 'f', transform=ax_f.transAxes, fontsize=8, weight='bold', va='bottom')
+    ax_g = at(4.75, Y1, 2.4, PH1)
+    panel_blocks(ax_g, df)
+    ax_g.text(-.17, 1.18, 'g', transform=ax_g.transAxes, fontsize=8, weight='bold', va='bottom')
 
     out = ROOT / 'notes/figures/fig1_paradigm_behaviour'
     fig.savefig(f'{out}.pdf')
