@@ -147,6 +147,18 @@ def build_paradigm(trials):
     return np.array(imgs, dtype=np.float32)
 
 
+def save_param_nifti(arr, mask_img, path):
+    """Unmask a per-voxel parameter and write it as float32.
+
+    The unmasked image inherits the mask's dtype (the GM mask is boolean -> uint8), which quantises every
+    parameter to 256 values with an auto-picked slope. Force float32 and an identity scaling.
+    """
+    img = masking.unmask(np.asarray(arr, dtype=np.float32), mask_img)
+    img.set_data_dtype(np.float32)
+    img.header.set_slope_inter(slope=1, inter=0)
+    img.to_filename(str(path))
+
+
 # ── gray matter mask helper ───────────────────────────────────────────────────
 
 def _get_gm_mask(sub, session, bids_folder, threshold):
@@ -311,8 +323,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     ref_img = sub.get_brain_mask(sessions[0])
 
     def _save(arr, desc):
-        masking.unmask(arr.astype(np.float32), mask_img).to_filename(
-            str(out_dir / (fn_base.format(desc=desc) + '_pe.nii.gz')))
+        save_param_nifti(arr, mask_img, out_dir / (fn_base.format(desc=desc) + '_pe.nii.gz'))
 
     # Individual parameter NIfTIs
     for col in ['x', 'y', 'sd', 'baseline', 'amplitude']:
