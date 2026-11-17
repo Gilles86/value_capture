@@ -2,7 +2,7 @@
 """Group (second-level) inference with permutations: whole-brain cluster and TFCE FWE, and reward ROIs.
 
 For each first-level contrast of fit_nilearn_glm_reward.py (MNI152NLin2009cAsym, 2 mm, 6 mm smoothing):
-  - nilearn non_parametric_inference, one-sample sign flipping (n = 12 → 4096 distinct flips; 10000 draws),
+  - nilearn non_parametric_inference, one-sample sign flipping (n = 12 → 4096 distinct flips; 5000 random draws),
     two-sided, cluster-forming threshold p < .001 (voxel t), FWE-corrected p for voxel max-t, cluster size,
     cluster mass and TFCE. Maps saved as -log10 p.
   - The same restricted to an a-priori reward mask (bilateral nucleus accumbens, caudate, putamen and the
@@ -102,8 +102,9 @@ def main(bids, subjects, n_perm, n_jobs, contrasts):
             subj_rows += [dict(contrast=con, roi=name, subject=s, effect=v)
                           for s, v in zip([Path(i).name[4:6] for i in imgs], vals)]
     r = pd.DataFrame(roi_rows)
-    r.round(5).to_csv(out / 'roi_stats.tsv', sep='\t', index=False)
-    pd.DataFrame(subj_rows).round(6).to_csv(out / 'roi_subject_means.tsv', sep='\t', index=False)
+    tag = f'_{contrasts[0]}' if len(contrasts) == 1 else ''      # one file per array task
+    r.round(5).to_csv(out / f'roi_stats{tag}.tsv', sep='\t', index=False)
+    pd.DataFrame(subj_rows).round(6).to_csv(out / f'roi_subject_means{tag}.tsv', sep='\t', index=False)
     pd.set_option('display.width', 200)
     print(r.round(3).to_string(index=False))
 
@@ -113,7 +114,7 @@ if __name__ == '__main__':
     ap.add_argument('--bids-folder', default='/shares/zne.uzh/gdehol/ds-valuecapture')
     ap.add_argument('--subjects', nargs='+', default=[f'{i:02d}' for i in range(4, 16)])
     ap.add_argument('--contrasts', nargs='+', default=CONTRASTS)
-    ap.add_argument('--n-perm', type=int, default=10000)
+    ap.add_argument('--n-perm', type=int, default=5000)   # n = 12 has only 4096 distinct sign flips
     ap.add_argument('--n-jobs', type=int, default=16)
     a = ap.parse_args()
     main(a.bids_folder, a.subjects, a.n_perm, a.n_jobs, a.contrasts)
