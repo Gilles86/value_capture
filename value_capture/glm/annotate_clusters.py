@@ -20,10 +20,11 @@ from scipy import ndimage
 
 mpl.rcParams.update({'font.family': 'Helvetica', 'font.size': 7, 'pdf.fonttype': 42})
 SPACE = 'space-MNI152NLin2009cAsym_res-2'
-TITLES = {'outcome_logreward': 'Reward received (log points)', 'outcome_magnitude': 'Outcome ×100 vs ×1',
-          'cue_value': 'Search: high vs low value', 'capture': 'Search: distractor vs absent',
-          'outcome_rpe': 'Prediction error (uncued − cued magnitude)', 'outcome_uncued': 'Outcome ×100 vs ×1, uncued',
-          'feedback_vs_omit': 'Points shown vs omitted', 'omission_value': 'Omission ×100 vs ×1'}
+TITLES = {'outcome_logreward': 'Reward received, log(1 + points)', 'outcome_logreward_cued': 'Log reward, cued (distractor present)',
+          'outcome_logreward_uncued': 'Log reward, uncued (distractor absent)',
+          'outcome_rpe': 'Prediction error: log-reward slope uncued − cued',
+          'cue_value': 'Search: high- vs low-value distractor', 'capture': 'Search: distractor vs absent',
+          'feedback_vs_omit': 'Points shown vs omitted', 'omission_value': 'Omission of ×100 vs ×1'}
 ALPHA = -np.log10(.05)
 
 

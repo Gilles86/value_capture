@@ -8,8 +8,9 @@ half a blank replaces it, which on a high-value trial omits a large expected rew
 
 Regressors (SPM canonical HRF):
   Search display (1.75 s):   search_high, search_low (distractor of that value), search_absent
-  Feedback shown (1 s):      fb_high_cued, fb_low_cued        (distractor present: magnitude predicted)
-                             fb_high_uncued, fb_low_uncued    (distractor absent: magnitude not predicted)
+  Feedback shown (1 s):      fb_cued (distractor present: multiplier predicted by its colour), fb_uncued
+                             (distractor absent: multiplier not predicted), each with a parametric modulator
+                             log(1 + points received), centred within cue type and run
   Feedback omitted (1 s):    omit_high, omit_low, omit_absent
   Errors are kept in their condition; a fast-response bonus scales points, so 'high/low' here is the multiplier.
 
@@ -19,15 +20,13 @@ Nuisance: 6 motion parameters, FD, DVARS, 7 aCompCor and fMRIPrep's DCT cosines 
 fit_nilearn_glm.py turned nilearn's drift model off but did not pass the cosines, so it had no high-pass).
 
 Contrasts:
-  cue_value          search_high − search_low               anticipatory value of the distractor colour
-  capture            (search_high + search_low)/2 − search_absent
-  outcome_magnitude  (fb_high_cued + fb_high_uncued − fb_low_cued − fb_low_uncued)/2
-  outcome_rpe        (fb_high_uncued − fb_low_uncued) − (fb_high_cued − fb_low_cued)
-                     magnitude effect larger when unpredicted (a prediction-error signature)
-  outcome_uncued     fb_high_uncued − fb_low_uncued
-  feedback_vs_omit   mean(fb_*) − mean(omit_*)
-  omission_value     omit_high − omit_low                   omission of a large vs small expected reward (−RPE)
-  outcome_logreward  parametric log(1 + points) on all shown feedback, centred (fb_logpoints)
+  cue_value                search_high − search_low          anticipatory value of the distractor colour
+  capture                  (search_high + search_low)/2 − search_absent
+  outcome_logreward        mean of the two log-points modulators (reward received)
+  outcome_logreward_cued   / _uncued: each cue type separately
+  outcome_rpe              uncued − cued log-points slope    (prediction-error signature: larger when unpredicted)
+  feedback_vs_omit         points shown vs omitted
+  omission_value           omit_high − omit_low              omission of a large vs small expected reward (−RPE)
 
     python value_capture/glm/fit_nilearn_glm_reward.py 04 --bids-folder /shares/zne.uzh/gdehol/ds-valuecapture \\
         --space MNI152NLin2009cAsym --res 2 --smoothing-fwhm 6 --n-jobs 8
@@ -48,15 +47,15 @@ TR = 1.6
 CONTRASTS = {
     'cue_value': 'search_high - search_low',
     'capture': '(search_high + search_low) / 2 - search_absent',
-    'outcome_magnitude': '(fb_high_cued + fb_high_uncued - fb_low_cued - fb_low_uncued) / 2',
-    'outcome_rpe': '(fb_high_uncued - fb_low_uncued) - (fb_high_cued - fb_low_cued)',
-    'outcome_uncued': 'fb_high_uncued - fb_low_uncued',
-    'feedback_vs_omit': ('(fb_high_cued + fb_low_cued + fb_high_uncued + fb_low_uncued) / 4 '
-                         '- (omit_high + omit_low + omit_absent) / 3'),
+    # Outcome: one regressor per cue type (unmodulated) + log(1 + points) as parametric modulator, centred within
+    # cue type. (v1 had high/low feedback regressors AND a log-points modulator centred over both: the modulator
+    # was ~ a copy of high − low, the two split the variance and came out with opposite signs in striatum.)
+    'outcome_logreward': '(fb_cued_logpoints + fb_uncued_logpoints) / 2',
+    'outcome_logreward_cued': 'fb_cued_logpoints',
+    'outcome_logreward_uncued': 'fb_uncued_logpoints',
+    'outcome_rpe': 'fb_uncued_logpoints - fb_cued_logpoints',
+    'feedback_vs_omit': '(fb_cued + fb_uncued) / 2 - (omit_high + omit_low + omit_absent) / 3',
     'omission_value': 'omit_high - omit_low',
-    # log(1 + points) received, over and above the condition means (cued/uncued × high/low): within-condition
-    # reward variation (faster responses earn more)
-    'outcome_logreward': 'fb_logpoints',
 }
 CONFOUNDS = ['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z', 'framewise_displacement', 'dvars'] + \
     [f'a_comp_cor_{i:02d}' for i in range(7)]
@@ -68,18 +67,18 @@ def build_events(ev, n_removed):
     for _, r in ev[ev.event_type == 'target'].iterrows():
         lab = 'search_absent' if not r.distractor_present else ('search_high' if r.value_rank == 2 else 'search_low')
         rows.append(dict(onset=r.onset - off, duration=1.75, trial_type=lab))
-    fb = ev[ev.event_type == 'feedback']
-    shown = fb.show_feedback.isin([True, 'True'])
-    logp = np.log1p(fb.earned_points.fillna(0).astype(float))
-    logp_c = logp - logp[shown].mean()           # centred over shown feedback (nilearn does not centre)
-    for (_, r), lp in zip(fb.iterrows(), logp_c):
-        mag = 'high' if r.value_rank == 2 else 'low'
-        if r.show_feedback in (True, 'True'):
-            lab = f'fb_{mag}_' + ('cued' if r.distractor_present in (True, 'True') else 'uncued')
-            # parametric: log(1 + points) actually received, all shown feedback
-            rows.append(dict(onset=r.onset - off, duration=1.0, trial_type='fb_logpoints', modulation=lp))
+    fb = ev[ev.event_type == 'feedback'].copy()
+    fb['shown'] = fb.show_feedback.isin([True, 'True'])
+    fb['cued'] = fb.distractor_present.isin([True, 'True'])
+    fb['logp'] = np.log1p(fb.earned_points.fillna(0).astype(float))
+    # centre log points within cue type over the shown feedback of this run (nilearn does not centre)
+    fb['logp_c'] = fb.logp - fb[fb.shown].groupby('cued').logp.transform('mean').reindex(fb.index).fillna(0)
+    for _, r in fb.iterrows():
+        if r.shown:
+            lab = 'fb_cued' if r.cued else 'fb_uncued'
+            rows.append(dict(onset=r.onset - off, duration=1.0, trial_type=f'{lab}_logpoints', modulation=r.logp_c))
         else:
-            lab = f'omit_{mag}' if r.distractor_present in (True, 'True') else 'omit_absent'
+            lab = ('omit_high' if r.value_rank == 2 else 'omit_low') if r.cued else 'omit_absent'
         rows.append(dict(onset=r.onset - off, duration=1.0, trial_type=lab, modulation=1.))
     return pd.DataFrame(rows).sort_values('onset').reset_index(drop=True)
 
