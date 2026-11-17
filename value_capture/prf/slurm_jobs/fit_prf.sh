@@ -27,10 +27,10 @@ SESSION="${SESSION:-}"
 GM_THRESHOLD="${GM_THRESHOLD:-0.1}"   # liberal: keeps ~all cortex incl. sulcal depths
 GD_ITERATIONS="${GD_ITERATIONS:-1000}"
 GLMSINGLE_DERIV="${GLMSINGLE_DERIV:-glmsingle}"
-VOXEL_CHUNK_SIZE=""  # A100 40GB handles 25k voxels easily (10k-pixel grid: ~1 GB per chunk)
-PARADIGM="${PARADIGM:-bar_items}"
-TRAIN_SESSIONS="${TRAIN_SESSIONS:-}"
-MODEL="${MODEL:-gauss}"   # gauss | dog | dn (dog/dn start from the Gaussian fit, which must exist)   # e.g. 1 -> fit on session 1 only (cross-validation)   # bar + search items on a ±5° grid -> prf_<deriv>_items
+VOXEL_CHUNK_SIZE="${VOXEL_CHUNK_SIZE:-25000}"  # A100: 25k voxels x 10k pixels ~ 1 GB per chunk
+PARADIGM="${PARADIGM:-bar_items}"   # bar + search items on a ±5° grid -> prf_<deriv>_items
+TRAIN_SESSIONS="${TRAIN_SESSIONS:-}"   # e.g. 1 -> fit on session 1 only (cross-validation)
+MODEL="${MODEL:-gauss}"   # gauss | dog | dn (dog/dn start from the Gaussian fit, which must exist)
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
 REPO=$HOME/git/value_capture
