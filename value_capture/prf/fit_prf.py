@@ -250,7 +250,7 @@ def _get_gm_mask(sub, session, bids_folder, threshold):
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
          gm_threshold=None, gd_iterations=1000, glmsingle_deriv='glmsingle',
          voxel_chunk_size=5000, learning_rate=0.01, paradigm='bar_items', train_sessions=None,
-         model_kind='gauss', min_init_r2=.02):
+         model_kind='gauss', min_init_r2=.02, average_trials=False, out_suffix=''):
 
     sub = Subject(subject, bids_folder=bids_folder)
     if sessions is None:
@@ -306,6 +306,22 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     # ── build stimulus paradigm ───────────────────────────────────────────────
     grid_coords = make_grid_coordinates()
     paradigm_arr = build_paradigm(trials, paradigm)   # (n_trials, GRID_RES²)
+    if average_trials:
+        # Experiment (2026-11-17): fit the mean beta per distinct stimulus image instead of every trial. With
+        # Gaussian noise and identical predictions within a group, least squares on the means gives the same
+        # parameters as on all trials (the within-group sum of squares does not depend on them); only R² changes.
+        _, grp, counts = np.unique(paradigm_arr, axis=0, return_inverse=True, return_counts=True)
+        grp = grp.ravel()
+        n_g = grp.max() + 1
+        means = np.zeros((n_g, data_df.shape[1]), np.float32)
+        np.add.at(means, grp, data_df.to_numpy())
+        means /= counts[:, None]
+        par_means = np.zeros((n_g, paradigm_arr.shape[1]), np.float32)
+        par_means[grp] = paradigm_arr
+        print(f'  Averaging: {len(grp)} trials -> {n_g} stimulus images ({counts.min()}-{counts.max()} trials each)')
+        data_df = pd.DataFrame(means)
+        data_df.index.name = 'frame'
+        paradigm_arr = par_means
     print(f'  Paradigm: {paradigm}, mean coverage per trial {paradigm_arr.sum(1).mean() * PIXEL_SIZE_DEG ** 2:.2f} deg²')
     paradigm_df = pd.DataFrame(paradigm_arr)
     paradigm_df.index.name = 'frame'
@@ -320,6 +336,9 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     gauss_deriv = prf_deriv
     if model_kind != 'gauss':
         prf_deriv += f'_{model_kind}'
+    prf_deriv += out_suffix
+    if average_trials:
+        prf_deriv += '_avg'
     from keras import ops
     from braincoder.utils.backend import softplus_inverse
 
@@ -492,6 +511,10 @@ if __name__ == '__main__':
     parser.add_argument('--model', choices=['gauss', 'dog', 'dn'], default='gauss',
                         help='gauss (grid search + GD); dog / dn start from the Gaussian fit of the same '
                              'paradigm and write prf_<deriv>[_items][_train-sesN]_<model>.')
+    parser.add_argument('--average-trials', action='store_true',
+                        help='Fit the mean beta per distinct stimulus image (experiment: averaging vs all trials); '
+                             'output prf_<deriv>..._avg.')
+    parser.add_argument('--out-suffix', default='', help='appended to the output derivative name')
     parser.add_argument('--bids-folder', default=str(BIDS_FOLDER))
     parser.add_argument(
         '--gm-threshold', type=float, default=None,
@@ -527,4 +550,6 @@ if __name__ == '__main__':
         paradigm=args.paradigm,
         train_sessions=args.train_sessions,
         model_kind=args.model,
+        average_trials=args.average_trials,
+        out_suffix=args.out_suffix,
     )

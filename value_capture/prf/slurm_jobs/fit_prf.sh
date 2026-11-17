@@ -30,6 +30,8 @@ GLMSINGLE_DERIV="${GLMSINGLE_DERIV:-glmsingle}"
 VOXEL_CHUNK_SIZE="${VOXEL_CHUNK_SIZE:-25000}"  # A100: 25k voxels x 10k pixels ~ 1 GB per chunk
 PARADIGM="${PARADIGM:-bar_items}"   # bar + search items on a ±5° grid -> prf_<deriv>_items
 TRAIN_SESSIONS="${TRAIN_SESSIONS:-}"   # e.g. 1 -> fit on session 1 only (cross-validation)
+AVERAGE="${AVERAGE:-}"   # 1 -> fit the mean beta per stimulus image (--average-trials)
+OUT_SUFFIX="${OUT_SUFFIX:-}"
 MODEL="${MODEL:-gauss}"   # gauss | dog | dn (dog/dn start from the Gaussian fit, which must exist)
 
 BIDS_FOLDER=/shares/zne.uzh/gdehol/ds-valuecapture
@@ -46,6 +48,8 @@ ARGS=(
 [ -n "$SESSION" ]          && ARGS+=(--sessions $SESSION)
 [ -n "$GM_THRESHOLD" ]     && ARGS+=(--gm-threshold "$GM_THRESHOLD")
 ARGS+=(--model "$MODEL")
+[ -n "$AVERAGE" ]          && ARGS+=(--average-trials)
+[ -n "$OUT_SUFFIX" ]       && ARGS+=(--out-suffix "$OUT_SUFFIX")
 [ -n "$TRAIN_SESSIONS" ]   && ARGS+=(--train-sessions $TRAIN_SESSIONS)
 [ -n "$VOXEL_CHUNK_SIZE" ] && ARGS+=(--voxel-chunk-size "$VOXEL_CHUNK_SIZE")
 
