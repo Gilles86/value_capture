@@ -4,9 +4,9 @@ Row 1: a, the display of one trial to scale (grey items, one colour-singleton di
 its aperture); b, the trial timeline, the 20 bar positions and the colour-value mapping per session.
 Row 2: c, response time by distractor (absent, low, high value) with within-subject differences beside it;
 d, accuracy, as c.
-Row 3: e, racing-diffusion model (minimal model): change in the target drift rate with a distractor and with a
-high- vs low-value distractor (posterior mean, 95% HDI, P(effect < 0)); f, its posterior predictive check as a
-delta plot (slowing vs absent per RT quantile); g, capture and value effect per block of runs, practice included,
+Row 3: e, the racing-diffusion model drawn with its group posterior means (target accumulator at drift v_c per
+condition, error accumulator, threshold) and its parameters: change in the target drift with a distractor (dots:
+subjects) and with a high- vs low-value distractor (posterior mean, 95% HDI, P(effect < 0); scanner runs); f, capture and value effect per block of runs, practice included,
 in both sessions (the mapping reverses in session 2).
 
 Geometry and timing from experiment/settings/default.yml and experiment/stimuli.py.
@@ -181,7 +181,7 @@ def panel_blocks(ax, df):
         ax.errorbar(m.index + off, m, se, fmt='o', color=c, ms=3.8, mec='w', mew=.5, lw=1, capsize=0, zorder=4)
         ax.text(.99, .97 - k * .1, lab, transform=ax.transAxes, color=c, fontsize=6.3, ha='right', va='top')
     ax.axhline(0, color='.6', lw=.6, ls='--', zorder=1)
-    labs = ['P1', 'P2', '1–2', '3–4', '5–6', '7–8']
+    labs = ['P1', 'P2', '1', '2', '3', '4']
     ax.set_xticks([b + (s - 1) * (nb + gap) for s in (1, 2) for b in range(nb)], labs * 2, fontsize=6)
     ax.set_xlim(-.7, 2 * nb + gap - .3)
     yl = ax.get_ylim()
@@ -191,41 +191,74 @@ def panel_blocks(ax, df):
                 ha='center', va='bottom', fontsize=6.5, color=FG)
         ax.text(x0 + .5, yl[0], 'Practice', ha='center', va='bottom', fontsize=5.8, color='.45')
     ax.set_ylabel('RT difference (ms)')
-    ax.set_xlabel('Runs', labelpad=2)
+    ax.set_xlabel('Practice, then pairs of runs', labelpad=2)
     for s in ('left', 'bottom'):
         ax.spines[s].set_position(('outward', 3))
 
 
-def panel_race(ax):
-    """Group effects on the target drift (% change), minimal race model: scanner runs (filled) and with practice
-    runs (open)."""
+def race_posterior():
+    import arviz as az
+    return az.from_netcdf(ROOT / 'notes/data/race_minimal.nc').posterior   # scanner runs only
+
+
+def panel_race_schematic(ax):
+    """Illustration of the racing-diffusion model (effects exaggerated for display): the target accumulator
+    rises to the threshold at drift v_c; a distractor lowers v_c, a high-value one more; a slower error
+    accumulator races alongside."""
+    a, t0 = 1., .22
+    v = {'none': 2.6, 'low': 2.0, 'high': 1.55}
+    rng = np.random.default_rng(7)
+    dt = .003
+    t = np.arange(0, 1.2, dt)
+    path = np.cumsum(v['none'] * dt + np.sqrt(dt) * rng.normal(size=len(t)) * .35)
+    hit = np.argmax(path >= a)
+    ax.plot(t0 + t[:hit + 1], path[:hit + 1], color=MUTED, lw=.6, alpha=.9)
+    for c in ('none', 'low', 'high'):
+        ax.plot([t0, t0 + a / v[c]], [0, a], color=COL[c], lw=1.5, solid_capstyle='round')
+    te = np.linspace(0, 1.0, 20)
+    ax.plot(t0 + te, .5 * te, color=FG, lw=1., ls=(0, (3, 2)))
+    ax.text(t0 + 1.0, .53, 'Error', fontsize=6.2, color=FG, va='center', ha='left')
+    ax.axhline(a, color=FG, lw=.8)
+    ax.text(t0 + 1.2, a + .03, 'Threshold', fontsize=6.2, color=FG, va='bottom', ha='right')
+    ax.axvspan(0, t0, color='#ECEFF2', lw=0)
+    ax.text(t0 / 2, .5, 'Non-decision', fontsize=5.8, color='.4', ha='center', va='center', rotation=90)
+    for j, (c, lab) in enumerate((('none', 'No distractor'), ('low', 'Low value'), ('high', 'High value'))):
+        ax.text(t0 + 1.2, .3 - j * .11, lab, color=COL[c], fontsize=6.2, ha='right', va='center')
+    ax.text(t0 + .17, .78, 'Target\ndrift', fontsize=6.2, color=FG, ha='right', va='center')
+    ax.set_xlim(0, t0 + 1.2)
+    ax.set_ylim(-.05, 1.18)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel('Time', labelpad=2)
+    ax.set_ylabel('Evidence', labelpad=2)
+
+
+def panel_race(ax, post):
+    """Group effects on the target drift (% change; posterior mean, 95% HDI) and the per-subject distractor
+    effects (posterior means, dots). Value enters at group level only in this model."""
     import arviz as az
     pct = lambda x: 100 * (np.exp(x) - 1)  # noqa: E731
-    nc = lambda tag: az.from_netcdf(ROOT / f'notes/data/race_{tag}.nc').posterior  # noqa: E731
-    pm, pp = nc('minimal'), nc('minimal_wpractice')
-    rows = [('Distractor\npresent', '#3E4C59', 'beta_dist_mu'), ('High − low\nvalue', COL['high'], 'beta_value')]
-    for i, (lab, c, var) in enumerate(rows):
-        for j, (post, style) in enumerate(((pm, 'f'), (pp, 'o'))):
-            d = post[var].values.ravel()
-            h = pct(az.hdi(d, hdi_prob=.95))
-            y = -(i + j * .28)
-            ax.plot(h, [y, y], color=c, lw=1.4, solid_capstyle='butt')
-            ax.plot(pct(d.mean()), y, 'o', color='w' if style == 'o' else c, mec=c, mew=1.1, ms=4.5, zorder=3)
-            ax.text(1.2, y, f'P(< 0) = {(d < 0).mean():.3f}'.replace('0.', '.'), fontsize=6, color=c, va='center')
+    rows = [('Distractor', '#3E4C59', 'beta_dist_mu', 'beta_dist'), ('High − low\nvalue', COL['high'], 'beta_value', None)]
+    for i, (lab, c, var, subj) in enumerate(rows):
+        d = post[var].values.ravel()
+        h = pct(az.hdi(d, hdi_prob=.95))
+        y = -i
+        if subj:
+            sm = pct(post[subj].mean(('chain', 'draw')).values)
+            ax.scatter(sm, y + np.random.default_rng(1).uniform(-.18, .18, len(sm)), s=7, color=c, alpha=.35,
+                       lw=0, zorder=2)
+        ax.plot(h, [y, y], color=c, lw=1.6, solid_capstyle='butt', zorder=3)
+        ax.plot(pct(d.mean()), y, 'o', color=c, mec='w', mew=.6, ms=5, zorder=4)
+        ax.text(-21, y + .28, f'{pct(d.mean()):+.1f}%   P(< 0) = {(d < 0).mean():.3f}'.replace('0.', '.').replace('-', '−'),
+                fontsize=6.2, color=c, va='bottom', ha='left')
     ax.axvline(0, color='.6', lw=.6, ls='--', zorder=0)
-    ax.set_yticks([-.14, -1.14], [r[0] for r in rows])
+    ax.set_yticks([0, -1], [r[0] for r in rows])
     ax.tick_params(axis='y', length=0)
     ax.spines['left'].set_visible(False)
-    ax.set_xlim(-14, 12)
-    ax.set_xticks([-10, -5, 0, 5])
-    ax.set_xlabel('Change in target drift rate (%)')
-    ax.set_ylim(-1.6, .45)
-    for j, (lab, style) in enumerate((('Race model, scanner runs', 'f'), ('+ practice runs', 'o'))):
-        yy = 1.04 - j * .1
-        ax.plot([.02, .1], [yy, yy], transform=ax.transAxes, color=FG, lw=1.4, solid_capstyle='butt', clip_on=False)
-        ax.plot(.06, yy, 'o', transform=ax.transAxes, color='w' if style == 'o' else FG, mec=FG, mew=1, ms=3.8,
-                clip_on=False, zorder=4)
-        ax.text(.14, yy, lab, transform=ax.transAxes, fontsize=6.2, va='center', color=FG)
+    ax.set_xlim(-22, 6)
+    ax.set_xticks([-20, -10, 0])
+    ax.set_xlabel('Change in target drift (%)')
+    ax.set_ylim(-1.5, .75)
     ax.spines['bottom'].set_position(('outward', 3))
 
 
@@ -311,17 +344,19 @@ def main():
         strip(s_, d, c, lab, (-8, 6), 'less accurate', 'less', seed=7)
         s_.set_xlabel('Accuracy difference (%)', labelpad=1)
 
-    # row 3: race model, its PPC, blocks
+    # row 3: race model (illustration + parameters), blocks
     Y1, PH1 = .42, 1.2
-    ax_e = at(.85, Y1, 1.35, PH1)
-    panel_race(ax_e)
-    ax_e.text(-.6, 1.18, 'e', transform=ax_e.transAxes, fontsize=8, weight='bold', va='bottom')
-    ax_f = at(2.85, Y1, 1.25, PH1)
-    panel_delta(ax_f)
-    ax_f.text(-.4, 1.18, 'f', transform=ax_f.transAxes, fontsize=8, weight='bold', va='bottom')
-    ax_g = at(4.75, Y1, 2.4, PH1)
+    post = race_posterior()
+    ax_e = at(.35, Y1, 1.75, PH1)
+    panel_race_schematic(ax_e)
+    ax_e.text(-.15, 1.1, 'e', transform=ax_e.transAxes, fontsize=8, weight='bold', va='bottom')
+    ax_e.set_title('Racing-diffusion model (illustration)', fontsize=7, color=FG, loc='left', pad=4)
+    ax_e2 = at(2.95, Y1, 1.35, PH1)
+    panel_race(ax_e2, post)
+    ax_e2.set_title('Fitted effects on the target drift', fontsize=7, color=FG, loc='left', pad=4, x=-.45)
+    ax_g = at(4.85, Y1, 2.3, PH1)
     panel_blocks(ax_g, df)
-    ax_g.text(-.17, 1.18, 'g', transform=ax_g.transAxes, fontsize=8, weight='bold', va='bottom')
+    ax_g.text(-.22, 1.1, 'f', transform=ax_g.transAxes, fontsize=8, weight='bold', va='bottom')
 
     out = ROOT / 'notes/figures/fig1_paradigm_behaviour'
     fig.savefig(f'{out}.pdf')
