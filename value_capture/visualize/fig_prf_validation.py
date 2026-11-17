@@ -275,7 +275,7 @@ def main_figure(d, render_dir, subject, view, out):
         show(ax, paths[j], box)
         ax.set_title(title, color=FG, pad=2)
         axes.append(ax)
-    axes[0].text(0, 1.06, f'sub-{subject:02d}', transform=axes[0].transAxes, fontsize=6.5, color='.45')
+    axes[0].text(.07, 1.05, f'sub-{subject:02d}', transform=axes[0].transAxes, fontsize=6.5, color='.45', va='bottom')
     map_keys(axes)
     letter(axes[0], 'a', x=-.02, y=1.04)
 
@@ -308,7 +308,7 @@ def supplement(d, render_dir, subjects, view, out):
     n = len(subjects)
     fig = plt.figure(figsize=(7.2, 9.6))
     gs = fig.add_gridspec(n + 1, 5, width_ratios=[1, 1, 1, 1, .62], height_ratios=[1] * n + [.45],
-                          left=.05, right=.99, top=.975, bottom=.01, hspace=.04, wspace=.03)
+                          left=.05, right=.99, top=.975, bottom=.05, hspace=.04, wspace=.03)
     box = crop_box([render_dir / f'sub-{s:02d}_{p}_{view}.png' for s in subjects for p, _ in MAPS])
     g = good(d)
     for i, s in enumerate(subjects):
@@ -353,11 +353,12 @@ if __name__ == '__main__':
     ap.add_argument('--subjects', nargs='+', type=int, default=list(range(4, 16)))
     ap.add_argument('--view', default='occipital')
     ap.add_argument('--supp-view', default='occipital')
+    ap.add_argument('--out-dir', default=str(ROOT / 'notes/figures'))
     a = ap.parse_args()
     d = load(a.tsv)
     rd = Path(a.render_dir)
-    main_figure(d, rd, a.subject, a.view, ROOT / 'notes/figures/prf_validation')
-    supplement(d, rd, a.subjects, a.supp_view, ROOT / 'notes/figures/prf_validation_subjects')
+    main_figure(d, rd, a.subject, a.view, Path(a.out_dir) / 'prf_validation')
+    supplement(d, rd, a.subjects, a.supp_view, Path(a.out_dir) / 'prf_validation_subjects')
     s = good(d).groupby(['subject', 'roi']).size().unstack().reindex(columns=ROI_ORDER)
     print('vertices with R² >= .1 per subject x ROI\n', s.fillna(0).astype(int))
     t = r2_gain(d).assign(gain=lambda x: x['items'] - x['bar'])
