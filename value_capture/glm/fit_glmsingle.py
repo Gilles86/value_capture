@@ -179,15 +179,52 @@ def build_design_matrix(events, n_vols, condition_to_idx, tr=TR):
     return dm, trial_order, trial_metadata
 
 
+def feedback_regressors(events, n_vols_up, n_removed_up, tr=None):
+    """(n_vols_up × 2) nuisance regressors for the points displays (1 s, shown on ~half the trials):
+    high- and low-multiplier feedback separately, boxcar convolved with the SPM canonical HRF at the upsampled
+    TR. GLMsingle otherwise models only the search display, and the feedback response (foveal, +85-145 % of the
+    bar-driven beta at eccentricity < .5 deg, notes/data/feedback_leak.tsv) ends up in that trial's beta."""
+    from nilearn.glm.first_level.hemodynamic_models import spm_hrf
+    tr = tr or TR_UP
+    fb = events[(events['event_type'] == 'feedback') & events['show_feedback'].isin([True, 'True'])]
+    hrf = spm_hrf(tr, oversampling=1)
+    out = np.zeros((n_vols_up, 2), np.float32)
+    for k, rank in enumerate((2, 0)):
+        box = np.zeros(n_vols_up)
+        for on in fb.loc[fb['value_rank'] == rank, 'onset']:
+            i0 = int(np.round(on / tr)) - n_removed_up
+            box[max(i0, 0):max(i0 + int(np.round(1.0 / tr)), 0)] = 1.
+        out[:, k] = np.convolve(box, hrf)[:n_vols_up]
+    out /= max(out.max(), 1e-6)
+    return out
+
+
+def _patch_runwise_fir(n_runs):
+    """GLMsingle's diagnostic run-wise FIR fit passes the FULL extra_regressors list to every run (glmsingle
+    skill): hand each FIR call its own run's regressors (calls come in run order)."""
+    import glmsingle.glmsingle as gs
+    orig = gs.glm_estimatemodel
+    calls = {'n': 0}
+
+    def patched(design, data, stimdur, tr, hrfmodel, hrfknobs, resampling, opt=None, *args, **kwargs):
+        extra = (opt or {}).get('extra_regressors')
+        if hrfmodel == 'fir' and not isinstance(data, list) and isinstance(extra, list) and len(extra) == n_runs:
+            opt = {**opt, 'extra_regressors': [extra[calls['n'] % n_runs]]}
+            calls['n'] += 1
+        return orig(design, data, stimdur, tr, hrfmodel, hrfknobs, resampling, opt, *args, **kwargs)
+
+    gs.glm_estimatemodel = patched
+
+
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmriprep',
-         fwhm=0, debug=False):
+         fwhm=0, debug=False, feedback_regressors_on=False):
     sub = Subject(subject, bids_folder=bids_folder)
 
     if sessions is None:
         sessions = sub.get_sessions()
 
     ses_label = f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
-    glmsingle_deriv = f'glmsingle_s{fwhm}mm' if fwhm else 'glmsingle'
+    glmsingle_deriv = (f'glmsingle_s{fwhm}mm' if fwhm else 'glmsingle') + ('_fbreg' if feedback_regressors_on else '')
     print(f'sub-{subject}  {ses_label}  [{fmriprep_deriv}]  fwhm={fwhm}mm  → {glmsingle_deriv}')
 
     # First pass: collect all events to build a globally consistent condition map
@@ -209,6 +246,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
     all_trial_types = []
     all_trial_metadata = []
     session_indicators = []
+    extra = []
     ref_bold = None
 
     for session in sessions:
@@ -238,6 +276,9 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
 
             data.append(bold_data)
             X.append(dm)
+            if feedback_regressors_on:
+                n_removed_up = int(round(n_removed * TR / TR_UP))
+                extra.append(feedback_regressors(events, n_vols_up, n_removed_up))
             all_trial_types.extend(trial_order)
             for m in trial_meta:
                 m.update({'session': session, 'run': run})
@@ -257,6 +298,10 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
         sessionindicator=np.array(session_indicators)[np.newaxis, :],
         n_pcs=20,
     )
+    if feedback_regressors_on:
+        opt['extra_regressors'] = extra
+        _patch_runwise_fir(len(data))
+        print(f'  feedback nuisance regressors: {[int((e.max(0) > 0).sum()) for e in extra]} columns per run')
 
     from glmsingle.glmsingle import GLM_single
     results = GLM_single(opt).fit(X, data, TR, TR_UP,
@@ -293,6 +338,9 @@ if __name__ == '__main__':
     parser.add_argument('--fwhm', type=float, default=0,
                         help='Spatial smoothing FWHM in mm applied to BOLD before GLMsingle. '
                              '0 = no smoothing (default). Output goes to glmsingle_s{fwhm}mm.')
+    parser.add_argument('--feedback-regressors', action='store_true',
+                        help='Model the points displays as nuisance regressors (high/low multiplier); output '
+                             'glmsingle[_sNmm]_fbreg.')
     parser.add_argument('--debug', action='store_true',
                         help='Write outputs and figures for all 4 GLMsingle model steps.')
     args = parser.parse_args()
@@ -301,4 +349,5 @@ if __name__ == '__main__':
          bids_folder=args.bids_folder,
          fmriprep_deriv=args.fmriprep_deriv,
          fwhm=args.fwhm,
-         debug=args.debug)
+         debug=args.debug,
+         feedback_regressors_on=args.feedback_regressors)
