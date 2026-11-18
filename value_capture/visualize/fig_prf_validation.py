@@ -367,7 +367,7 @@ def supplement(d, render_dir, subjects, view, out, rh=.72):
     ax = at(lm, yk, mw, key_h)
     ax.set_axis_off()
     for k, roi in enumerate(ROI_ORDER):
-        ax.text((k % 2) * .5 + .08, .9 - (k // 2) * .24, roi, transform=ax.transAxes, color=ROI_COLORS[roi],
+        ax.text((k % 3) * .34 + .04, .95 - (k // 3) * .24, roi, transform=ax.transAxes, color=ROI_COLORS[roi],
                 fontsize=6.5, weight='bold', va='top')
     angle_key(at(lm + mw + mw / 2 - key_h * .45, yk + .05, key_h * .9, key_h * .9))
     colorbar(at(lm + 2 * mw + .1, yk + key_h * .6, mw - .2, .07), 'nipy_spectral', 0, 5, 'Eccentricity (°)',
