@@ -156,6 +156,7 @@ def add_gains(df, gains, rois):
     """Trial-wise decoded gains (robust z within subject x session x area), averaged over the areas."""
     g = pd.read_csv(gains, sep='\t', dtype={'subject': str})
     g = g[g.roi.isin(rois)]
+    assert len(g), f'no decoded gains for areas {rois}'
     keys = ['subject', 'session', 'run', 'trial_nr']
     d = df.assign(subject=df.subject.astype(str).str.zfill(2))
     z = add_gain_regressors(g.merge(d[keys + ['cond']], on=keys, how='inner', validate='many_to_one'))
@@ -181,7 +182,7 @@ def main(model, draws, tune, post_only=False, practice=False, gains=None, gain_r
     else:
         with m:
             idata = pm.sample(draws=draws, tune=tune, chains=4, target_accept=.95, nuts_sampler='numpyro',
-                              random_seed=1, compute_convergence_checks=False)   # r_hat and ESS are reported below
+                              random_seed=1)
     post = idata.posterior
     flat = {k: post[k].values.reshape(-1, *post[k].shape[2:]) for k in post.data_vars}
     n = flat['beta_session'].shape[0]
