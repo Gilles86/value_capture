@@ -57,6 +57,30 @@ def check_alignment():
             assert any((align(blob(t), d, t) == blob(i)).all() for i in (3, 5)), (d, t)
 
 
+def remove_points(ro, decoded, shown):
+    """Subtract the decoded image of the points display, estimated on the no-distractor trials only.
+
+    On those trials the multiplier is random and nothing else depends on it. Per multiplier: mean image with points minus
+    mean image without points, after removing the mean image of each bar position. The map is subtracted from every trial
+    with points of that multiplier. Regressing points on all trials would also remove the value effect (points scale with
+    value), and fitting the points effect separately per distractor condition would just recover the trials without points.
+    """
+    present = ro.distractor_present.astype(bool).to_numpy()
+    rank = ro.value_rank.to_numpy()
+    bars = pd.factorize(ro.bar_orientation + ro.bar_position.round(4).astype(str))[0]
+    resid = decoded.astype(np.float32).copy()
+    for b in np.unique(bars[~present]):
+        m = (bars == b) & ~present
+        resid[m] -= decoded[m].mean(0)
+    baseline = resid[~present & ~shown].mean(0)
+    out = decoded.copy()
+    for r in (0., 2.):
+        m = ~present & shown & (rank == r)
+        if m.any():
+            out[shown & (rank == r)] -= resid[m].mean(0) - baseline
+    return out
+
+
 def summarise(ro, decoded, imasks, bar_masks, gx, gy):
     """Item and bar rows and aligned difference maps of one subject × session × ROI × decoder."""
     bars = list(zip(ro.bar_orientation, ro.bar_position.round(4)))
@@ -159,8 +183,11 @@ def main(decoded_root, out_dir, since, feedback='all', behaviour=None):
             flag = ro[['session', 'run', 'trial_nr']].assign(subject=sub).merge(
                 shown, on=['subject', 'session', 'run', 'trial_nr'], how='left', validate='one_to_one').show_feedback
             assert flag.notna().all(), f
-            keep = flag.astype(bool).to_numpy() == (feedback == 'shown')
-            ro, decoded = ro[keep].reset_index(drop=True), decoded[keep]
+            if feedback == 'regress':
+                decoded = remove_points(ro, decoded, flag.astype(bool).to_numpy())
+            else:
+                keep = flag.astype(bool).to_numpy() == (feedback == 'shown')
+                ro, decoded = ro[keep].reset_index(drop=True), decoded[keep]
         i_, c_, m_, t_ = summarise(ro, decoded, imasks, bar_masks, gx, gy)
         key = dict(subject=sub, session=int(ses), roi=roi, decoder=dec)
         if dec == 'outline':
@@ -184,8 +211,9 @@ if __name__ == '__main__':
     ap.add_argument('--decoded-root', default='/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/decoded_trials')
     ap.add_argument('--out-dir', default='notes/data/decoded_gain')
     ap.add_argument('--since', default='2026-11-18T14:05:00', help='ignore decoder outputs older than this')
-    ap.add_argument('--feedback', choices=['all', 'shown', 'none'], default='all',
-                    help='use all trials, or only those with / without the points display')
+    ap.add_argument('--feedback', choices=['all', 'shown', 'none', 'regress'], default='all',
+                    help='all trials, only those with / without the points display, or all trials with the '
+                         'points display subtracted (remove_points)')
     ap.add_argument('--behaviour', default='notes/data/behavior_trials_main.tsv')
     a = ap.parse_args()
     main(a.decoded_root, a.out_dir, a.since, a.feedback, a.behaviour)
