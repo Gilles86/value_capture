@@ -35,6 +35,7 @@ from value_capture.utils.data import Subject  # noqa: E402
 ROIS = {'V1': (1,), 'V2': (2,), 'V3': (3,), 'hV4': (4,), 'VO': (5, 6), 'LO': (7, 8), 'TO': (9, 10),
         'V3AB': (11, 12)}
 DIAGONALS = (1, 3, 5, 7)
+DIST_BINS = ((0, 1.5), (1.5, 2.5), (2.5, 3.5), (3.5, 5), (5, 8))   # deg from the item centre (items at 4 deg)
 
 
 def item_masks():
@@ -95,6 +96,15 @@ def readout(decoded, paradigm, trials, imasks, grid):
                 acc_bar = row.get(key + '_sum', 0.) + dec[q].sum()
                 row[key + '_sum'] = acc_bar
                 row[key + '_n'] = row.get(key + '_n', 0) + int(q.sum())
+        # distance gradient: decoded bar intensity binned by distance from the distractor / the target item
+        for who, loc in (('dist', t.distractor_location), ('targ', t.target_location)):
+            if pd.isna(loc):
+                continue
+            cx, cy = fp.ITEM_XY[int(loc)]
+            dd = np.hypot(gx - cx, gy - cy)
+            for lo, hi in DIST_BINS:
+                q = bar & (dd >= lo) & (dd < hi)
+                row[f'bar_{who}_d{lo:g}-{hi:g}'] = float(dec[q].mean()) if q.any() else np.nan
         for key in [k_ for k_ in list(row) if k_.endswith('_sum')]:
             row[key[:-4]] = row.pop(key) / row.pop(key[:-4] + '_n')
         rows.append(row)
