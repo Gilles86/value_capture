@@ -199,7 +199,7 @@ def panel_items(ax, items, rois, labels=True):
             for v in out.pct:                 # subjects beyond the axis stay visible, at its edge
                 ax.plot(x, hi if v > hi else lo, '^' if v > hi else 'v', color=COL[role], ms=3, alpha=.7, mew=0, zorder=2)
             p = signflip_p(w[role])
-            ax.text(x, lo - .1 * span, fmt_p(p).replace('p = ', ''), color=COL[role], ha='center', va='center', fontsize=5.8,
+            ax.text(x, lo - .1 * span, fmt_p(p).replace('p = ', '').replace('p < ', '<'), color=COL[role], ha='center', va='center', fontsize=5.8,
                     weight='bold' if p < .05 else 'normal')
         p = signflip_p((w.distractor_high - w.distractor_low).dropna())
         y = hi + .05 * span
