@@ -65,20 +65,32 @@ def summarise(ro, decoded, imasks, bar_masks, gx, gy):
 
     # items
     item = np.array([[decoded[k][imasks[i]].mean() for i in DIAGONALS] for k in range(len(ro))])
-    item_rows = {'target': [], 'distractor_low': [], 'distractor_high': []}
-    for j, i in enumerate(DIAGONALS):
-        neutral = (target != i) & ~(present & (dist == i))
-        loc_mean = item[neutral, j].mean()
+    is_neutral = np.array([(target != i) & ~(present & (dist == i)) for i in DIAGONALS]).T
+    # One denominator per ROI: a single location's neutral mean can be close to 0 where PRF coverage is poor
+    norm = item[is_neutral].mean()
+    gain = np.full(item.shape, np.nan)            # % of the ROI's neutral intensity, matched on location and bar
+    for j in range(len(DIAGONALS)):
         for b in np.unique(bar_ids):
             here = bar_ids == b
-            if not (here & neutral).any():
+            pool = here & is_neutral[:, j]
+            n = pool.sum()
+            if n == 0:
                 continue
-            base = item[here & neutral, j].mean()
-            pct = 100 * (item[:, j] - base) / loc_mean
-            item_rows['target'] += list(pct[here & (target == i)])
-            for r, lab in labels.items():
-                item_rows[lab] += list(pct[here & present & (dist == i) & (rank == r)])
-    items = [dict(role=k, pct=float(np.mean(v)), n_trials=len(v)) for k, v in item_rows.items() if v]
+            total = item[pool, j].sum()
+            gain[here, j] = 100 * (item[here, j] - total / n) / norm
+            # a neutral item is compared with the other neutral trials only (leave-one-out)
+            gain[pool, j] = (100 * (item[pool, j] - (total - item[pool, j]) / (n - 1)) / norm) if n > 1 else np.nan
+    column = {i: j for j, i in enumerate(DIAGONALS)}
+    target_gain = gain[np.arange(len(ro)), [column[int(t)] for t in target]]
+    dist_gain = np.array([gain[k, column[int(dist[k])]] if present[k] else np.nan for k in range(len(ro))])
+    neutral_gain = np.nanmean(np.where(is_neutral, gain, np.nan), 1)
+    trials = pd.DataFrame(dict(run=ro.run, trial_nr=ro.trial_nr, target_gain=target_gain, distractor_gain=dist_gain,
+                               neutral_gain=neutral_gain))
+    item_rows = {'target': target_gain}
+    for r, lab in labels.items():
+        item_rows[lab] = dist_gain[present & (rank == r)]
+    items = [dict(role=k, pct=float(np.nanmean(v)), n_trials=int(np.isfinite(v).sum())) for k, v in item_rows.items()
+             if np.isfinite(v).any()]
 
     # no-distractor baseline image per bar position
     base = {b: decoded[(bar_ids == b) & ~present].mean(0) for b in np.unique(bar_ids) if ((bar_ids == b) & ~present).any()}
@@ -108,7 +120,7 @@ def summarise(ro, decoded, imasks, bar_masks, gx, gy):
     for r, lab in labels.items():
         if sums[r]:
             maps[lab.split('_')[1]] = np.mean(sums[r], 0).astype(np.float32)
-    return items, curves, maps
+    return items, curves, maps, trials
 
 
 def main(decoded_root, out_dir, since):
@@ -120,7 +132,7 @@ def main(decoded_root, out_dir, since):
     inside = np.hypot(gx, gy) <= fp.GEOM['radius']
     bar_masks = {(o, round(float(p), 4)): (fp.make_bar_image(p, o).ravel() > .5) & inside
                  for o in ('horizontal', 'vertical') for p in fp.GEOM['bar_positions']}
-    items, curves, maps = [], [], {}
+    items, curves, maps, trial_rows = [], [], {}, []
     pat = re.compile(r'sub-(\d+)/readout_ses-(\d)_roi-(\w+)_dec-(\w+)\.tsv$')
     for f in sorted(Path(decoded_root).glob('sub-*/readout_ses-*_roi-*_dec-*.tsv')):
         npz = f.with_name(f.name.replace('readout_', 'decoded_').replace('.tsv', '.npz'))
@@ -130,8 +142,10 @@ def main(decoded_root, out_dir, since):
         ro = pd.read_csv(f, sep='\t')
         decoded = np.load(npz)['decoded'].astype(np.float32)
         assert len(ro) == len(decoded), f
-        i_, c_, m_ = summarise(ro, decoded, imasks, bar_masks, gx, gy)
+        i_, c_, m_, t_ = summarise(ro, decoded, imasks, bar_masks, gx, gy)
         key = dict(subject=sub, session=int(ses), roi=roi, decoder=dec)
+        if dec == 'outline':
+            trial_rows.append(t_.assign(subject=sub, session=int(ses), roi=roi))
         items += [{**key, **r} for r in i_]
         curves += [{**key, **r} for r in c_]
         for value, img in m_.items():
@@ -141,6 +155,7 @@ def main(decoded_root, out_dir, since):
     out_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(items).to_csv(out_dir / 'item_gain.tsv', sep='\t', index=False)
     pd.DataFrame(curves).to_csv(out_dir / 'bar_distance.tsv', sep='\t', index=False)
+    pd.concat(trial_rows).to_csv(out_dir / 'trial_gains.tsv', sep='\t', index=False)
     np.savez_compressed(out_dir / 'aligned_maps.npz', **maps)
     print(out_dir, len(items), len(curves), len(maps))
 

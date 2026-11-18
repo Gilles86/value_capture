@@ -1,0 +1,16 @@
+# Small environment for the hierarchical race models (PyMC sampled with NumPyro).
+#   mamba env create -f create_env/environment_bayes.yml
+name: value_capture_bayes
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pymc>=5.20
+  - numpyro
+  - jax
+  - arviz<1.0
+  - numpy
+  - pandas
+  - scipy
+  - pyarrow
+  - xarray
