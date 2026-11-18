@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import patheffects
+from matplotlib.lines import Line2D
 from matplotlib.patches import Circle, Rectangle
 
 from value_capture.visualize.paradigm_movie import AP_R, BAR_POS, BAR_W, BG, GREY, ORANGE, draw_bar, draw_item
@@ -146,7 +147,7 @@ def illustrate_bar(fig, spec):
 
     def right(ax):
         display(ax, distractor=None)
-    return equation(fig, spec, left, right, 'Bar', 'No distractor')
+    return equation(fig, spec, left, right, 'Bar: near vs far', 'No distractor')
 
 
 def draw_map(ax, img, vmax, title, col, p):
@@ -213,10 +214,43 @@ def panel_items(ax, items, rois, labels=True):
     sns.despine(ax=ax, offset=4, trim=False)
 
 
-def panel_bar(fig, spec, bars, rois):
-    d = bars.query("aligned_to == 'distractor'").groupby(['subject', 'roi', 'value', 'distance'], as_index=False).pct.mean()
-    g = d.groupby(['roi', 'value', 'distance']).pct
-    lo, hi = robust_limits(d.pct, (g.mean() - g.sem()).quantile(.1), (g.mean() + g.sem()).quantile(.9), pad=.05)
+def bar_predictions(gain_dir):
+    """Bar response (near minus far part of the same bar) predicted by each subject's fitted distractor gain field."""
+    files = sorted(Path(gain_dir).glob('sub-*_gain_fields.tsv'))
+    if not files:
+        return None
+    from value_capture.prf import fit_prf as fp
+    grid = fp.make_grid_coordinates()
+    gx, gy = grid.x.to_numpy(), grid.y.to_numpy()
+    inside = np.hypot(gx, gy) <= fp.GEOM['radius']
+    masks = [(fp.make_bar_image(p, o).ravel() > .5) & inside for o in ('horizontal', 'vertical') for p in fp.GEOM['bar_positions']]
+    d = np.hypot(gx - ECC / np.sqrt(2), gy - ECC / np.sqrt(2))
+    edges = list(zip(DIST_EDGES[:-1], DIST_EDGES[1:]))
+
+    def weights(sigma):
+        w = np.exp(-d ** 2 / (2 * sigma ** 2))
+        out = []
+        for lo, hi in edges:
+            v = [w[m & (d >= lo) & (d < hi)].mean() - w[m & (d >= 3.5)].mean() for m in masks
+                 if (m & (d >= lo) & (d < hi)).any() and (m & (d >= 3.5)).any()]
+            out.append(np.mean(v) if v else np.nan)
+        return out
+    rows = []
+    for f in files:
+        t = pd.read_csv(f, sep='\t', dtype={'subject': str}).query("scope == 'all'")
+        for _, r in t.iterrows():
+            w = weights(r.field_sigma)
+            for (lo, hi), x in zip(edges, w):
+                for value in ('low', 'high'):
+                    rows.append(dict(subject=r.subject.zfill(2), roi=r.roi, value=value, distance=(lo + hi) / 2,
+                                     pred=100 * r[f'field_gain_distractor_{value}'] * x))
+    return pd.DataFrame(rows)
+
+
+def panel_bar(fig, spec, bars, rois, pred=None):
+    d = bars.query("aligned_to == 'distractor'").groupby(['subject', 'roi', 'value', 'distance'], as_index=False).pct_within.mean()
+    g = d.groupby(['roi', 'value', 'distance']).pct_within
+    lo, hi = robust_limits(d.pct_within, (g.mean() - g.sem()).quantile(.1), (g.mean() + g.sem()).quantile(.9), pad=.05)
     span = hi - lo
     sub = spec.subgridspec(1, len(rois), wspace=.1)
     axes = []
@@ -224,18 +258,22 @@ def panel_bar(fig, spec, bars, rois):
         ax = fig.add_subplot(sub[i], sharey=axes[0] if axes else None)
         axes.append(ax)
         q = d[d.roi == r]
-        sns.lineplot(q, x='distance', y='pct', hue='value', hue_order=['low', 'high'], palette=COL, errorbar=('se', 1),
+        sns.lineplot(q, x='distance', y='pct_within', hue='value', hue_order=['low', 'high'], palette=COL, errorbar=('se', 1),
                      marker='o', markersize=3, markeredgewidth=0, lw=1.2, legend=False, ax=ax)
+        if pred is not None and (pred.roi == r).any():
+            m = pred[pred.roi == r].groupby(['subject', 'value', 'distance']).pred.mean().groupby(['value', 'distance']).mean()
+            for v in ('low', 'high'):
+                ax.plot(m[v].index, m[v].values, color=COL[v], ls=(0, (2, 1.5)), lw=1, zorder=4)
         ax.axhline(0, color='.35', lw=.8, ls=(0, (3, 2)))
         ax.set_title(r, pad=2)
-        ax.set(xlabel='', ylabel='Change (%)' if i == 0 else '')
+        ax.set(xlabel='', ylabel='Change vs far bar (%)' if i == 0 else '')
         if i:
             ax.tick_params(labelleft=False)
-        m = q.groupby(['subject', 'distance']).pct.mean().unstack()
-        near = m[[c for c in m.columns if c <= NEAR]].mean(1) - m[[c for c in m.columns if c >= FAR]].mean(1)
-        w = q.groupby(['subject', 'value']).pct.mean().unstack()
-        p1, p2 = signflip_p(near), signflip_p((w.high - w.low).dropna())
-        ax.text(.03, .99, f'Near − far: {fmt_p(p1)}', transform=ax.transAxes, va='top', fontsize=5.6,
+        near = q[q.distance <= NEAR]
+        p1 = signflip_p(near.groupby('subject').pct_within.mean())
+        w = near.groupby(['subject', 'value']).pct_within.mean().unstack()
+        p2 = signflip_p((w.high - w.low).dropna())
+        ax.text(.03, .99, f'Near bar: {fmt_p(p1)}', transform=ax.transAxes, va='top', fontsize=5.6,
                 weight='bold' if p1 < .05 else 'normal')
         ax.text(.03, .895, f'High − low: {fmt_p(p2)}', transform=ax.transAxes, va='top', fontsize=5.6,
                 weight='bold' if p2 < .05 else 'normal')
@@ -244,10 +282,17 @@ def panel_bar(fig, spec, bars, rois):
     return axes
 
 
+def bar_key(fig, x, y):
+    """Glyph for the gain-field prediction, drawn in the style of the curves."""
+    fig.add_artist(Line2D([x, x + .03], [y + .006, y + .006], transform=fig.transFigure, color=FG, ls=(0, (2, 1.5)), lw=1))
+    fig.text(x + .036, y, 'Predicted by the fitted gain field', fontsize=7, color=FG)
+
+
 def main(in_dir, out):
     items = pd.read_csv(Path(in_dir) / 'item_gain.tsv', sep='\t', dtype={'subject': str}).query("decoder == 'outline'")
     bars = pd.read_csv(Path(in_dir) / 'bar_distance.tsv', sep='\t', dtype={'subject': str}).query("decoder == 'outline'")
     maps = group_maps(in_dir)
+    pred = bar_predictions(Path(in_dir).parent / 'gain_fields')
     per_roi = items.groupby('roi').subject.nunique()
     rois = [r for r in ROIS if per_roi.get(r, 0) >= min(2, items.subject.nunique())]
     n = items.subject.nunique()
@@ -294,22 +339,24 @@ def main(in_dir, out):
     row = gs[2].subgridspec(1, 2, width_ratios=[1, 3.3], wspace=.3)
     a = illustrate_bar(fig, row[0])
     a.text(-.2, 1.3, 'd', transform=a.transAxes, fontsize=10, weight='bold')
-    axes = panel_bar(fig, row[1], bars, rois)
-    axes[0].text(0, 1.2, 'Bar intensity compared with no-distractor trials, by distance from the distractor',
+    axes = panel_bar(fig, row[1], bars, rois, pred)
+    axes[0].text(0, 1.2, 'Bar near the distractor compared with the far part of the same bar, on the same trial',
                  transform=axes[0].transAxes, fontsize=8, va='bottom')
     box = axes[2].get_position()
     fig.text(box.x0 + box.width / 2, .012, 'Distance of bar from distractor (deg)', ha='center', fontsize=8)
     fig.text(.02, .012, 'High value', color=HIGH, ha='left', fontsize=8)
     fig.text(.115, .012, 'Low value', color=LOW, ha='left', fontsize=8)
+    if pred is not None:
+        bar_key(fig, .2, .012)
 
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(f'{out}.pdf')
     fig.savefig(f'{out}.png', dpi=200)
     print(f'{out}.pdf', f'n = {n} subjects', sorted(items.subject.unique()))
-    plot_pathways(items, bars, n, out)
+    plot_pathways(items, bars, n, out, pred)
 
 
-def plot_pathways(items, bars, n, out):
+def plot_pathways(items, bars, n, out, pred=None):
     """Items and bar responses averaged over the areas of each visual pathway (within subject)."""
     group = {r: g for g, rs in PATHWAYS.items() for r in rs}
     per_roi = items.groupby('roi').subject.nunique()
@@ -319,7 +366,8 @@ def plot_pathways(items, bars, n, out):
     names = {g: f'{g} ({", ".join(rs)}), n = {n_in[g]}' for g, rs in have.items() if rs}
     label = lambda d: d[d.roi.isin(used)].assign(roi=lambda x: x.roi.map(group).map(names))  # noqa: E731
     it = label(items).groupby(['subject', 'roi', 'role'], as_index=False).pct.mean()
-    ba = label(bars).groupby(['subject', 'roi', 'aligned_to', 'value', 'distance'], as_index=False).pct.mean()
+    ba = label(bars).groupby(['subject', 'roi', 'aligned_to', 'value', 'distance'], as_index=False).pct_within.mean()
+    pr = None if pred is None else label(pred)
     order = list(names.values())
     fig = plt.figure(figsize=(7.25, 4.9))
     gs = fig.add_gridspec(2, 1, height_ratios=[1.1, 1], hspace=.55, left=.08, right=.985, top=.87, bottom=.1)
@@ -330,12 +378,14 @@ def plot_pathways(items, bars, n, out):
     for i, r in enumerate(ROLE):
         ax.text(.005 + i * .2, 1.0, ROLE[r], color=COL[r], transform=ax.transAxes, fontsize=6.5, va='bottom')
     ax.text(-.07, 1.14, 'a', transform=ax.transAxes, fontsize=10, weight='bold')
-    axes = panel_bar(fig, gs[1], ba, order)
-    axes[0].text(0, 1.2, 'Bar intensity compared with no-distractor trials, by distance from the distractor',
+    axes = panel_bar(fig, gs[1], ba, order, pr)
+    axes[0].text(0, 1.2, 'Bar near the distractor compared with the far part of the same bar, on the same trial',
                  transform=axes[0].transAxes, fontsize=8, va='bottom')
     axes[0].text(-.2, 1.2, 'b', transform=axes[0].transAxes, fontsize=10, weight='bold')
-    fig.text(.53, .015, 'Distance of bar from distractor (deg)', ha='center', fontsize=8)
+    fig.text(.8, .015, 'Distance of bar from distractor (deg)', ha='center', fontsize=8)
     fig.text(.02, .015, 'High value', color=HIGH, fontsize=8), fig.text(.115, .015, 'Low value', color=LOW, fontsize=8)
+    if pr is not None:
+        bar_key(fig, .2, .015)
     fig.savefig(f'{out}_pathways.pdf')
     fig.savefig(f'{out}_pathways.png', dpi=200)
     print(f'{out}_pathways.pdf', names)
