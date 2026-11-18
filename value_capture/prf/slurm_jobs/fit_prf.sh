@@ -50,6 +50,7 @@ ARGS=(
 ARGS+=(--model "$MODEL")
 [ -n "$AVERAGE" ]          && ARGS+=(--average-trials)
 [ -n "$OUT_SUFFIX" ]       && ARGS+=(--out-suffix "$OUT_SUFFIX")
+[ -n "$MIN_INIT_R2" ]      && ARGS+=(--min-init-r2 "$MIN_INIT_R2")   # dog / dn: only voxels with this Gaussian R²
 [ -n "$TRAIN_SESSIONS" ]   && ARGS+=(--train-sessions $TRAIN_SESSIONS)
 [ -n "$VOXEL_CHUNK_SIZE" ] && ARGS+=(--voxel-chunk-size "$VOXEL_CHUNK_SIZE")
 

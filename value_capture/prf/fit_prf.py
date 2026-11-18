@@ -506,6 +506,8 @@ if __name__ == '__main__':
                              'Reduce if GPU runs out of memory; increase for speed on large GPUs.')
     parser.add_argument('--learning-rate', type=float, default=0.01,
                         help='Adam learning rate for gradient descent (default: 0.01).')
+    parser.add_argument('--min-init-r2', type=float, default=.02,
+                        help='dog / dn: fit only voxels with at least this Gaussian R² (the others stay NaN).')
     parser.add_argument('--paradigm', choices=['bar_items', 'bar'], default='bar_items',
                         help='bar_items (default): bar + the 8 search items, output prf_<deriv>_items; '
                              'bar: bar only, output prf_<deriv>.')
@@ -523,6 +525,7 @@ if __name__ == '__main__':
         paradigm=args.paradigm,
         train_sessions=args.train_sessions,
         model_kind=args.model,
+        min_init_r2=args.min_init_r2,
         average_trials=args.average_trials,
         out_suffix=args.out_suffix,
     )
