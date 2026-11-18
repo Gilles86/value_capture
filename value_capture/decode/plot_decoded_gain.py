@@ -26,10 +26,10 @@ mpl.rcParams.update({'font.family': 'Helvetica', 'font.size': 7, 'axes.labelsize
 ROIS = ['V1', 'V2', 'V3', 'hV4', 'LO']     # V3AB has only ~30 voxels with a usable PRF
 MAP_ROIS = ['V1', 'V2', 'V3']
 PATHWAYS = {'Early': ['V1', 'V2', 'V3'], 'Ventral': ['hV4', 'VO', 'LO', 'TO'], 'Dorsal': ['V3AB', 'IPS']}
-# Conditions: Okabe-Ito colourblind-safe vermillion / blue. Difference maps: ColorBrewer PRGn (colourblind-safe,
-# diverging), so that a map's sign can never be read as a condition.
-HIGH, LOW, TARGET = '#D55E00', '#0072B2', '#2B2B2B'
-DIVERGING = 'PRGn'
+# The retsupp paper palette (retsupp/visualize/paper/paper_style.py), one colour = one meaning: target orange, high value
+# purple, low value bluish green, everything without a condition achromatic. Signed maps stay red-blue.
+HIGH, LOW, TARGET, FG = '#7B3294', '#009E73', '#F77F00', '#1F2933'
+DIVERGING = 'RdBu_r'
 COL = {'distractor_high': HIGH, 'distractor_low': LOW, 'target': TARGET, 'high': HIGH, 'low': LOW}
 ROLE = {'target': 'Target', 'distractor_low': 'Low-value distractor', 'distractor_high': 'High-value distractor'}
 ITEM_R, ECC = .8, 4.0      # ring just around an item (1.5 deg long), clear of the bar aperture (radius 3.17 deg)
@@ -134,7 +134,7 @@ def illustrate_bar(fig, spec):
     xx, yy = np.meshgrid(axis, axis)
     on_bar = (np.abs(xx - BAR_POS[6]) <= BAR_W / 2) & (np.hypot(xx, yy) <= AP_R)
     bins = np.digitize(np.hypot(xx - d, yy - d), DIST_EDGES).astype(float)
-    cmap = mpl.colors.ListedColormap(['#FDE725', '#7AD151', '#22A884', '#2A788E', '#414487'])
+    cmap = mpl.colors.ListedColormap(['#FFFFFF', '#D5DCE3', '#9AA5B1', '#52606D', '#1F2933'])   # stimulus: achromatic
 
     def left(ax):
         display(ax, distractor=1, bar=False)
@@ -267,7 +267,7 @@ def main(in_dir, out):
     draw_map(a0, low.mean(0), vmax, 'Low value − no distractor', LOW, signflip_p(ring_mean(low)))
     a1 = fig.add_subplot(top[2])
     draw_map(a1, high.mean(0), vmax, 'High value − no distractor', HIGH, signflip_p(ring_mean(high)))
-    im = draw_map(fig.add_subplot(top[3]), (high - low).mean(0), vmax, 'High − low value', TARGET,
+    im = draw_map(fig.add_subplot(top[3]), (high - low).mean(0), vmax, 'High − low value', FG,
                   signflip_p(ring_mean(high - low)))
     cax = fig.add_subplot(top[4])
     cb = fig.colorbar(im, cax=cax, format='%.4f')
