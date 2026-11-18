@@ -130,8 +130,14 @@ def summarise(ro, decoded, imasks, bar_masks, gx, gy):
     return items, curves, maps, trials
 
 
-def main(decoded_root, out_dir, since):
+def main(decoded_root, out_dir, since, feedback='all', behaviour=None):
+    """feedback: 'all' trials, or only those with points shown ('shown') or not shown ('none'), baselines included."""
     check_alignment()
+    shown = None
+    if feedback != 'all':
+        shown = pd.read_csv(behaviour, sep='\t', dtype={'subject': str})
+        shown['subject'] = shown.subject.str.zfill(2)
+        shown = shown[['subject', 'session', 'run', 'trial_nr', 'show_feedback']]
     since = datetime.fromisoformat(since).timestamp()
     imasks = item_masks()
     g = fp.make_grid_coordinates()
@@ -149,6 +155,12 @@ def main(decoded_root, out_dir, since):
         ro = pd.read_csv(f, sep='\t')
         decoded = np.load(npz)['decoded'].astype(np.float32)
         assert len(ro) == len(decoded), f
+        if shown is not None:
+            flag = ro[['session', 'run', 'trial_nr']].assign(subject=sub).merge(
+                shown, on=['subject', 'session', 'run', 'trial_nr'], how='left', validate='one_to_one').show_feedback
+            assert flag.notna().all(), f
+            keep = flag.astype(bool).to_numpy() == (feedback == 'shown')
+            ro, decoded = ro[keep].reset_index(drop=True), decoded[keep]
         i_, c_, m_, t_ = summarise(ro, decoded, imasks, bar_masks, gx, gy)
         key = dict(subject=sub, session=int(ses), roi=roi, decoder=dec)
         if dec == 'outline':
@@ -172,5 +184,8 @@ if __name__ == '__main__':
     ap.add_argument('--decoded-root', default='/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/decoded_trials')
     ap.add_argument('--out-dir', default='notes/data/decoded_gain')
     ap.add_argument('--since', default='2026-11-18T14:05:00', help='ignore decoder outputs older than this')
+    ap.add_argument('--feedback', choices=['all', 'shown', 'none'], default='all',
+                    help='use all trials, or only those with / without the points display')
+    ap.add_argument('--behaviour', default='notes/data/behavior_trials_main.tsv')
     a = ap.parse_args()
-    main(a.decoded_root, a.out_dir, a.since)
+    main(a.decoded_root, a.out_dir, a.since, a.feedback, a.behaviour)

@@ -288,7 +288,7 @@ def bar_key(fig, x, y):
     fig.text(x + .036, y, 'Predicted by the fitted gain field', fontsize=7, color=FG)
 
 
-def main(in_dir, out):
+def main(in_dir, out, label=''):
     items = pd.read_csv(Path(in_dir) / 'item_gain.tsv', sep='\t', dtype={'subject': str}).query("decoder == 'outline'")
     bars = pd.read_csv(Path(in_dir) / 'bar_distance.tsv', sep='\t', dtype={'subject': str}).query("decoder == 'outline'")
     maps = group_maps(in_dir)
@@ -299,7 +299,7 @@ def main(in_dir, out):
 
     fig = plt.figure(figsize=(7.25, 7.5))
     gs = fig.add_gridspec(3, 1, height_ratios=[1.3, 1.05, .95], hspace=.52, left=.065, right=.985, top=.895, bottom=.07)
-    fig.text(.01, .985, f'Prototype, n = {n} subjects', fontsize=9, weight='bold', va='top')
+    fig.text(.01, .985, f'Prototype, n = {n} subjects{label}', fontsize=9, weight='bold', va='top')
 
     # a, b: example display and aligned maps
     top = gs[0].subgridspec(1, 6, width_ratios=[1, 1, 1, 1, .05, .3], wspace=.07)
@@ -327,7 +327,7 @@ def main(in_dir, out):
     a = illustrate_items(fig, row[0])
     a.text(-.2, 1.3, 'c', transform=a.transAxes, fontsize=10, weight='bold')
     early, later = [r for r in rois if r in MAP_ROIS], [r for r in rois if r not in MAP_ROIS]
-    pair = row[1].subgridspec(1, 2, width_ratios=[len(early) + .45, max(len(later), 1)], wspace=.16)
+    pair = row[1].subgridspec(1, 2, width_ratios=[len(early) + .45, max(len(later), 1) * 1.3], wspace=.16)
     ax = fig.add_subplot(pair[0])
     panel_items(ax, items[items.roi.isin(early)], early)
     panel_items(fig.add_subplot(pair[1]), items[items.roi.isin(later)], later, labels=False)   # own y-axis: larger effects
@@ -353,10 +353,10 @@ def main(in_dir, out):
     fig.savefig(f'{out}.pdf')
     fig.savefig(f'{out}.png', dpi=200)
     print(f'{out}.pdf', f'n = {n} subjects', sorted(items.subject.unique()))
-    plot_pathways(items, bars, n, out, pred)
+    plot_pathways(items, bars, n, out, pred, label)
 
 
-def plot_pathways(items, bars, n, out, pred=None):
+def plot_pathways(items, bars, n, out, pred=None, label=''):
     """Items and bar responses averaged over the areas of each visual pathway (within subject)."""
     group = {r: g for g, rs in PATHWAYS.items() for r in rs}
     per_roi = items.groupby('roi').subject.nunique()
@@ -371,7 +371,7 @@ def plot_pathways(items, bars, n, out, pred=None):
     order = list(names.values())
     fig = plt.figure(figsize=(7.25, 4.9))
     gs = fig.add_gridspec(2, 1, height_ratios=[1.1, 1], hspace=.55, left=.08, right=.985, top=.87, bottom=.1)
-    fig.text(.01, .985, f'Prototype, n = {n} subjects', fontsize=9, weight='bold', va='top')
+    fig.text(.01, .985, f'Prototype, n = {n} subjects{label}', fontsize=9, weight='bold', va='top')
     ax = fig.add_subplot(gs[0])
     panel_items(ax, it, order)
     ax.set_title('Targets and distractors compared with the same item when it is neutral (same bar position)', loc='left', pad=9, fontsize=8)
@@ -395,5 +395,6 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--in-dir', default='notes/data/decoded_gain')
     ap.add_argument('--out', default='notes/figures/decoded_gain_prototype')
+    ap.add_argument('--label', default='', help='appended to the figure heading')
     a = ap.parse_args()
-    main(a.in_dir, a.out)
+    main(a.in_dir, a.out, a.label)
