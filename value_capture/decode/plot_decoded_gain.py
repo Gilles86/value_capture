@@ -29,7 +29,7 @@ PATHWAYS = {'Early': ['V1', 'V2', 'V3'], 'Ventral': ['hV4', 'VO', 'LO', 'TO'], '
 HIGH, LOW, TARGET = '#C8102E', '#1F6FB2', '#2B2B2B'
 COL = {'distractor_high': HIGH, 'distractor_low': LOW, 'target': TARGET, 'high': HIGH, 'low': LOW}
 ROLE = {'target': 'Target', 'distractor_low': 'Low-value distractor', 'distractor_high': 'High-value distractor'}
-ITEM_R, ECC = 1.0, 4.0
+ITEM_R, ECC = .8, 4.0      # ring just around an item (1.5 deg long), clear of the bar aperture (radius 3.17 deg)
 DIST_EDGES = (0, 1.5, 2.5, 3.5, 5, 8)      # aggregate_decoded / decode_trials DIST_BINS
 NEAR, FAR = 2.0, 4.25                      # bin centres: near <= 2 deg, far >= 4.25 deg
 
@@ -115,7 +115,7 @@ def illustrate_items(fig, spec):
     d = ECC / np.sqrt(2)
 
     def ring(ax, col):
-        ax.add_patch(Circle((d, d), 1.25, fill=False, ec=col, lw=1.4, zorder=7))
+        ax.add_patch(Circle((d, d), ITEM_R, fill=False, ec=col, lw=1.2, zorder=7))
 
     def left(ax):
         display(ax, distractor=1), ring(ax, HIGH)
@@ -157,7 +157,7 @@ def draw_map(ax, img, vmax, title, col, p):
     ax.text(d, d + 1.2, 'Distractor', color=col, ha='center', va='bottom', fontsize=6.5)
     ax.text(-d, d + 1.2, 'Target', color=TARGET, ha='center', va='bottom', fontsize=6.5)
     ax.text(-d, -d - 1.2, 'Target', color=TARGET, ha='center', va='top', fontsize=6.5)
-    ax.text(d, d - 1.2, fmt_p(p), color=col, ha='center', va='top', fontsize=6.5, weight='bold' if p < .05 else 'normal',
+    ax.text(4.9, d - .95, fmt_p(p), color=col, ha='right', va='top', fontsize=6, weight='bold' if p < .05 else 'normal',
             path_effects=[patheffects.withStroke(linewidth=1.8, foreground='w')], zorder=8)
     ax.set_title(title, color=col, pad=3, fontsize=7.5)
     clean_axes(ax)
@@ -203,8 +203,9 @@ def panel_items(ax, items, rois):
         ax.plot([i, i, i + .265, i + .265], [y - .025 * span, y, y, y - .025 * span], color='.25', lw=.7)
         ax.text(i + .1325, y + .015 * span, fmt_p(p), ha='center', va='bottom', fontsize=5.8,
                 weight='bold' if p < .05 else 'normal')
-    ax.text(-.93, lo - .1 * span, 'p vs 0', ha='left', va='center', fontsize=5.8, color='.3')
-    ax.set(xlabel='', ylabel='Change (%)')
+    ax.text(-.93, lo - .1 * span, 'p vs\nneutral', ha='left', va='center', fontsize=5.8, color='.3', linespacing=.95)
+    ax.text(-.93, .012 * span, 'Neutral items', ha='left', va='bottom', fontsize=6.2, color='.25')
+    ax.set(xlabel='', ylabel='Change vs neutral (%)')
     sns.despine(ax=ax, offset=4, trim=False)
 
 
@@ -278,7 +279,7 @@ def main(in_dir, out):
     a.text(-.2, 1.3, 'c', transform=a.transAxes, fontsize=10, weight='bold')
     ax = fig.add_subplot(row[1])
     panel_items(ax, items, rois)
-    ax.set_title('Item intensity compared with the same item when neutral, at the same bar position', loc='left', pad=9, fontsize=8)
+    ax.set_title('Targets and distractors compared with the same item when it is neutral (same bar position)', loc='left', pad=9, fontsize=8)
     for i, r in enumerate(ROLE):
         ax.text(.005 + i * .2, 1.0, ROLE[r], color=COL[r], transform=ax.transAxes, fontsize=6.5, va='bottom')
 
@@ -315,7 +316,7 @@ def plot_pathways(items, bars, n, out):
     fig.text(.01, .985, f'Prototype, n = {n} subjects, decoding still running', fontsize=9, weight='bold', va='top')
     ax = fig.add_subplot(gs[0])
     panel_items(ax, it, order)
-    ax.set_title('Item intensity compared with the same item when neutral, at the same bar position', loc='left', pad=9, fontsize=8)
+    ax.set_title('Targets and distractors compared with the same item when it is neutral (same bar position)', loc='left', pad=9, fontsize=8)
     for i, r in enumerate(ROLE):
         ax.text(.005 + i * .2, 1.0, ROLE[r], color=COL[r], transform=ax.transAxes, fontsize=6.5, va='bottom')
     ax.text(-.07, 1.14, 'a', transform=ax.transAxes, fontsize=10, weight='bold')

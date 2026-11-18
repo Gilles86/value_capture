@@ -64,7 +64,7 @@ def main(gains, rois, draws, tune, out):
         d = df[df.roi == roi].copy()
         d['subject'] = d.subject.astype(str)
         print(f'{roi}: {d.subject.nunique()} subjects, {len(d)} trials', flush=True)
-        idata = bmb.Model(FORMULA, d).fit(draws=draws, tune=tune, chains=4, cores=4, target_accept=.95, random_seed=1,
+        idata = bmb.Model(FORMULA, d).fit(draws=draws, tune=tune, chains=4, cores=1, target_accept=.95, random_seed=1,
                                           progressbar=False)
         post = idata.posterior
         draws_ = {t: post[t].values.ravel() for t in TERMS}
