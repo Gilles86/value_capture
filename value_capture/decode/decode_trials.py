@@ -102,7 +102,7 @@ def readout(decoded, paradigm, trials, imasks, grid):
 
 
 def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders, l2_norm, learning_rate,
-         max_iter, min_iter, out_root, gm_threshold=.1, resid_max_iter=2000):
+         max_iter, min_iter, out_root, gm_threshold=.1, resid_max_iter=2000, glmsingle_deriv='glmsingle_fbreg'):
     from braincoder.models import GaussianPRF2D
     from braincoder.optimize import ResidualFitter
 
@@ -114,8 +114,8 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
     pars_all = pd.read_csv(prf_dir / f'sub-{subject}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv',
                            sep='\t', index_col=0)
 
-    betas = sub.get_single_trial_estimates(sessions, glmsingle_deriv='glmsingle')
-    trials = fp.add_item_info(sub, sub.get_trial_metadata(sessions, glmsingle_deriv='glmsingle').reset_index(drop=True))
+    betas = sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv)   # points displays modelled out
+    trials = fp.add_item_info(sub, sub.get_trial_metadata(sessions, glmsingle_deriv=glmsingle_deriv).reset_index(drop=True))
     raw = pd.concat([sub.get_onsets(int(s), int(r)).query("event_type == 'target'")
                      [['trial_nr', 'distractor_location', 'distractor_present']].assign(session=s, run=r)
                      for (s, r), _ in trials.groupby(['session', 'run'])])
@@ -205,7 +205,8 @@ if __name__ == '__main__':
     ap.add_argument('--learning-rate', type=float, default=.5)
     ap.add_argument('--max-iter', type=int, default=1000)
     ap.add_argument('--min-iter', type=int, default=200)
+    ap.add_argument('--glmsingle-deriv', default='glmsingle_fbreg')
     ap.add_argument('--out-root', default='/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/decoded_trials')
     a = ap.parse_args()
     main(a.subject, a.test_session, a.rois, a.bids_folder, a.max_voxels, a.min_r2, a.decoders, a.l2_norm,
-         a.learning_rate, a.max_iter, a.min_iter, a.out_root)
+         a.learning_rate, a.max_iter, a.min_iter, a.out_root, glmsingle_deriv=a.glmsingle_deriv)
