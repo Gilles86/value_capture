@@ -6,7 +6,8 @@ location (PRF coverage) and are brighter when the bar is close:
   items: decoded intensity of the diagonal item when it is target or distractor, minus the same item at the same
          bar position when it is neutral, in % of that item's neutral mean.
   bar:   decoded bar intensity minus the no-distractor trials at the same bar position, binned by distance from the
-         distractor (or target), in % of the mean decoded bar intensity on no-distractor trials.
+         distractor (or target), in % of the mean decoded bar intensity on no-distractor trials. pct_within subtracts
+         the far part of the same bar on the same trial (>= 3.5 deg from that item), which removes trial-wide changes.
   maps:  the same difference over the whole image, rotated so that the distractor is at the upper right and
          reflected so that an adjacent target is at the upper left, averaged per distractor value.
 
@@ -30,6 +31,7 @@ from value_capture.prf import fit_prf as fp  # noqa: E402
 
 N = fp.GRID_RES
 CANONICAL = 1             # distractor at 45 deg (upper right)
+FAR_DEG = 3.5             # bar pixels at least this far from the item serve as the same-trial reference
 
 
 def rotate(img, k):
@@ -98,6 +100,7 @@ def summarise(ro, decoded, imasks, bar_masks, gx, gy):
 
     curves, maps = [], {}
     acc = {(who, r, b_): [] for who in ('distractor', 'target') for r in labels for b_ in range(len(DIST_BINS))}
+    within = {k: [] for k in acc}
     sums = {r: [] for r in labels}
     for k in np.flatnonzero(present):
         if bar_ids[k] not in base or rank[k] not in labels:
@@ -108,15 +111,19 @@ def summarise(ro, decoded, imasks, bar_masks, gx, gy):
         for who, loc in (('distractor', dist[k]), ('target', target[k])):
             cx, cy = fp.ITEM_XY[int(loc)]
             dd = np.hypot(gx - cx, gy - cy)
+            far = bar & (dd >= FAR_DEG)
             for b_, (lo, hi) in enumerate(DIST_BINS):
                 q = bar & (dd >= lo) & (dd < hi)
                 if q.any():
                     acc[who, rank[k], b_].append(100 * diff[q].mean() / scale)
+                    if far.any():
+                        within[who, rank[k], b_].append(100 * (diff[q].mean() - diff[far].mean()) / scale)
     for (who, r, b_), v in acc.items():
         if v:
             lo, hi = DIST_BINS[b_]
             curves.append(dict(aligned_to=who, value=labels[r].split('_')[1], bin_lo=lo, bin_hi=hi,
-                               distance=(lo + hi) / 2, pct=float(np.mean(v)), n_trials=len(v)))
+                               distance=(lo + hi) / 2, pct=float(np.mean(v)), n_trials=len(v),
+                               pct_within=float(np.mean(within[who, r, b_])) if within[who, r, b_] else np.nan))
     for r, lab in labels.items():
         if sums[r]:
             maps[lab.split('_')[1]] = np.mean(sums[r], 0).astype(np.float32)
