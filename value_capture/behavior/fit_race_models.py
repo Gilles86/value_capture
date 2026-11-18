@@ -180,13 +180,14 @@ def main(model, draws, tune, post_only=False, practice=False, gains=None, gain_r
     if post_only:
         idata = az.from_netcdf(out_nc)
     else:
-        # PyMC's default start (jitter of ±1 on every parameter) leaves this model's chains stuck: start close to the prior mode
+        # PyMC's jitter of ±1 on every parameter leaves this model's chains stuck (every transition diverges), and it is
+        # also applied to initvals unless switched off: start the chains close to the initial point instead
         rng = np.random.default_rng(1)
         ip = m.initial_point()
         starts = [{k: v + rng.uniform(-.05, .05, np.shape(v)) for k, v in ip.items()} for _ in range(4)]
         with m:
             idata = pm.sample(draws=draws, tune=tune, chains=4, target_accept=.95, nuts_sampler='numpyro',
-                              random_seed=1, initvals=starts)
+                              random_seed=1, initvals=starts, nuts_sampler_kwargs=dict(jitter=False))
     post = idata.posterior
     flat = {k: post[k].values.reshape(-1, *post[k].shape[2:]) for k in post.data_vars}
     n = flat['beta_session'].shape[0]
