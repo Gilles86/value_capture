@@ -113,7 +113,7 @@ def readout(decoded, paradigm, trials, imasks, grid):
 
 def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders, l2_norm, learning_rate,
          max_iter, min_iter, out_root, gm_threshold=.1, resid_max_iter=2000, glmsingle_deriv='glmsingle_fbreg',
-         model_kind='gauss'):
+         model_kind='gauss', prf_deriv='prf_glmsingle_items'):
     from braincoder.models import (DifferenceOfGaussiansPRF2D, DivisiveNormalizationGaussianPRF2D,
                                    GaussianPRF2D)
     from braincoder.optimize import ResidualFitter, StimulusFitter
@@ -124,13 +124,13 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
     sub = Subject(subject, bids_folder=bids_folder)
     sessions = sub.get_sessions()
     train_session = [s for s in sessions if s != test_session][0]
-    prf_dir = (Path(bids_folder) / 'derivatives' / f'prf_glmsingle_items_train-ses{train_session}'
+    prf_dir = (Path(bids_folder) / 'derivatives' / f'{prf_deriv}_train-ses{train_session}'
                / f'sub-{subject}' / 'ses-all' / 'func')
     pars_all = pd.read_csv(prf_dir / f'sub-{subject}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv',
                            sep='\t', index_col=0)
     pars_model = pars_all
     if model_kind != 'gauss':     # robustness check: same voxels (selected on the Gaussian fit), other encoding model
-        model_dir = (Path(bids_folder) / 'derivatives' / f'prf_glmsingle_items_train-ses{train_session}_{model_kind}'
+        model_dir = (Path(bids_folder) / 'derivatives' / f'{prf_deriv}_train-ses{train_session}_{model_kind}'
                      / f'sub-{subject}' / 'ses-all' / 'func')
         pars_model = pd.read_csv(model_dir / f'sub-{subject}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv',
                                  sep='\t', index_col=0)
@@ -216,10 +216,13 @@ if __name__ == '__main__':
     ap.add_argument('--max-iter', type=int, default=1000)
     ap.add_argument('--min-iter', type=int, default=200)
     ap.add_argument('--glmsingle-deriv', default='glmsingle_fbreg')
+    ap.add_argument('--prf-deriv', default='prf_glmsingle_items',
+                    help='PRF derivative, without _train-ses<N>; use the PRFs fitted on the same betas when possible')
     ap.add_argument('--model', choices=['gauss', 'dog', 'dn'], default='gauss',
                     help='encoding model; dog / dn write to <out-root>_<model> (voxels still selected on the Gaussian fit)')
     ap.add_argument('--out-root', default='/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/decoded_trials')
     a = ap.parse_args()
     out_root = a.out_root if a.model == 'gauss' else f'{a.out_root}_{a.model}'
     main(a.subject, a.test_session, a.rois, a.bids_folder, a.max_voxels, a.min_r2, a.decoders, a.l2_norm,
-         a.learning_rate, a.max_iter, a.min_iter, out_root, glmsingle_deriv=a.glmsingle_deriv, model_kind=a.model)
+         a.learning_rate, a.max_iter, a.min_iter, out_root, glmsingle_deriv=a.glmsingle_deriv, model_kind=a.model,
+         prf_deriv=a.prf_deriv)
