@@ -43,8 +43,11 @@ if __name__ == '__main__':
     ap.add_argument('--subjects', nargs='+', type=int, default=list(range(4, 16)))
     ap.add_argument('--prf-dir', default=R.PRF_DIR)
     ap.add_argument('--out', default=str(ROOT / 'notes' / 'webgl' / 'prf'))
+    ap.add_argument('--r2-ramp', nargs=2, type=float, default=list(R.R2_RAMP),
+                    help='R² at which colour starts to show and is fully opaque')
     a = ap.parse_args()
     R.PRF_DIR = a.prf_dir
+    R.R2_RAMP = tuple(a.r2_ramp)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     for s in a.subjects:
@@ -54,6 +57,6 @@ if __name__ == '__main__':
 <style>body{{font-family:Helvetica,Arial,sans-serif;margin:2em;color:#1F2933}}li{{margin:.3em 0}}</style>
 <h2>value_capture: PRF maps ({a.prf_dir})</h2>
 <p>Datasets (top-right menu): visual areas, polar angle, eccentricity, PRF size, R². Colour fades in from
-R² = .05 to .20; white lines: visual-area borders (neuropythy + Wang IPS/FEF). Slider: fiducial → inflated.</p>
+R² = {a.r2_ramp[0]:g} to {a.r2_ramp[1]:g}; white lines: visual-area borders (neuropythy + Wang IPS/FEF). Slider: fiducial → inflated.</p>
 <ul>{links}</ul>""")
     print(out / 'index.html')
