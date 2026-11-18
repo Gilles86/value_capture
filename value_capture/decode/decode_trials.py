@@ -8,7 +8,7 @@ Cross-validation by session: PRFs from ``prf_glmsingle_items_train-ses<other>`` 
 noise model (ResidualFitter: omega, dof) from the training session's betas, voxel selection on the training fit's R².
 The decoded session never entered any of these (GLMsingle itself was fitted jointly over all runs, a mild leak).
 
-Decoders (closed-form MAP for the linear Gaussian PRF model, one image per trial, no temporal coupling):
+Decoders (braincoder StimulusFitter, one image per trial, no temporal coupling):
   outline: only the pixels the true stimulus covers (bar + 8 items) are free, the rest fixed at 0, so the
            decoder estimates how strongly each part of the known input drove the voxels.
   free:    every pixel free.
@@ -104,7 +104,7 @@ def readout(decoded, paradigm, trials, imasks, grid):
 def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders, l2_norm, learning_rate,
          max_iter, min_iter, out_root, gm_threshold=.1, resid_max_iter=2000, glmsingle_deriv='glmsingle_fbreg'):
     from braincoder.models import GaussianPRF2D
-    from braincoder.optimize import ResidualFitter
+    from braincoder.optimize import ResidualFitter, StimulusFitter
 
     sub = Subject(subject, bids_folder=bids_folder)
     sessions = sub.get_sessions()
@@ -155,32 +155,14 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
             max_n_iterations=resid_max_iter, progressbar=False, method='gauss')
         print(f'  noise model on {is_train.sum()} training trials: {time.time() - t0:.0f} s', flush=True)
         model = GaussianPRF2D(grid_coordinates=grid, paradigm=te_par, data=te_data, parameters=pars)
-        # The Gaussian PRF model is linear in the stimulus: y = b + W s (W = amplitude · RF, voxels × pixels). With
-        # Gaussian noise (covariance Ω, the ResidualFitter estimate; its t dof is ignored) and an L2 prior, the MAP
-        # image is closed form: s = (Wᵀ Ω⁻¹ W + 2λ I)⁻¹ Wᵀ Ω⁻¹ (y − b). No StimulusFitter (needs TensorFlow + TFP,
-        # not in this JAX env) and no gradient descent to tune.
-        P_te = paradigm[~is_train]
-        px = np.flatnonzero(P_te.max(0) > 0)                       # pixels any test trial uses
-        eye = pd.DataFrame(np.eye(paradigm.shape[1], dtype=np.float32)[px], index=pd.Index(range(len(px)), name='frame'))
-        zero = pd.DataFrame(np.zeros((1, paradigm.shape[1]), np.float32), index=pd.Index([0], name='frame'))
-        b = np.asarray(model.predict(paradigm=zero, parameters=pars))[0]
-        W = (np.asarray(model.predict(paradigm=eye, parameters=pars)) - b).T.astype(np.float64)   # voxels × px
-        Oi = np.linalg.inv(np.asarray(omega, np.float64))
-        WtOi = W.T @ Oi
-        R = te_data.to_numpy(np.float64) - b
         for dec in decoders:
             t0 = time.time()
-            decoded = np.zeros(P_te.shape, np.float32)
-            if dec == 'free':
-                A = np.linalg.solve(WtOi @ W + 2 * l2_norm * np.eye(len(px)), WtOi)
-                decoded[:, px] = (A @ R.T).T
-            else:                                                   # outline: only the true input's pixels free
-                for k in range(len(R)):
-                    m = P_te[k, px] > 0
-                    Wm = W[:, m]
-                    decoded[k, px[m]] = np.linalg.solve(Wm.T @ Oi @ Wm + 2 * l2_norm * np.eye(m.sum()),
-                                                        Wm.T @ Oi @ R[k])
-            ro = readout(decoded, P_te, trials[~is_train].reset_index(drop=True), imasks, grid)
+            mask = (paradigm[~is_train] > 0) if dec == 'outline' else None
+            sf = StimulusFitter(model=model, data=te_data, omega=omega, parameters=pars, dof=dof)
+            fit = sf.fit(l2_norm=l2_norm, learning_rate=learning_rate, max_n_iterations=max_iter,
+                         min_n_iterations=min_iter, progressbar=False, mask=mask)
+            decoded = np.asarray(fit.values if hasattr(fit, 'values') else fit, dtype=np.float32)
+            ro = readout(decoded, paradigm[~is_train], trials[~is_train].reset_index(drop=True), imasks, grid)
             true_r = [np.corrcoef(decoded[k], paradigm[~is_train][k])[0, 1] for k in range(len(decoded))]
             ro = ro.assign(subject=subject, roi=roi, decoder=dec, n_voxels=len(sel), r_true=true_r,
                            train_session=train_session)
