@@ -111,7 +111,7 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--bids-folder', default='/shares/zne.uzh/gdehol/ds-valuecapture')
     ap.add_argument('--subjects', nargs='+', default=[f'{i:02d}' for i in range(4, 16)])
-    ap.add_argument('--design', choices=['logreward', 'rpe'], default='logreward')
+    ap.add_argument('--design', choices=list(DESIGNS), default='logreward')
     ap.add_argument('--contrasts', nargs='+', default=None)
     ap.add_argument('--matlab', required=True)
     a = ap.parse_args()

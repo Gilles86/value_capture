@@ -26,7 +26,15 @@ TITLES = {'outcome_logreward': 'Reward received, log(1 + points)', 'outcome_logr
           'outcome_logreward_uncued': 'Log reward, uncued (distractor absent)',
           'outcome_rpe': 'Prediction error: log-reward slope uncued − cued',
           'cue_value': 'Search: high- vs low-value distractor', 'capture': 'Search: distractor vs absent',
-          'feedback_vs_omit': 'Points shown vs omitted', 'omission_value': 'Omission of ×100 vs ×1'}
+          'feedback_vs_omit': 'Points shown vs omitted', 'omission_value': 'Omission of ×100 vs ×1',
+          # rpe design (fit_nilearn_glm_reward.py --design rpe)
+          'rpe': 'Reward beyond the cue: log reward minus the cue-condition mean',
+          'expected_reward': 'Expected reward at outcome: high- vs low-value cue, points shown',
+          'uncued_vs_cued': 'Points shown: uncued vs cued trials',
+          # rpe_rt design: search RT and errors modelled
+          'rpe_cued': 'Reward beyond the cue, cued trials (speed only)',
+          'rpe_uncued': 'Reward beyond the cue, uncued trials (unpredicted ×100 vs ×1)',
+          'search_rt': 'Search: slower vs faster correct responses'}
 ALPHA = -np.log10(.05)
 # Significant voxels only are coloured, so the map starts at |t| ≈ 3-4: saturated colours there, brighter (never
 # pale) towards the maximum. Positive: dark red → orange; negative: navy → blue.

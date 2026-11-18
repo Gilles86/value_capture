@@ -31,7 +31,9 @@ from scipy import stats
 CONTRASTS = ['outcome_logreward', 'outcome_logreward_cued', 'outcome_logreward_uncued', 'outcome_rpe', 'cue_value',
              'capture', 'feedback_vs_omit', 'omission_value']
 CONTRASTS_RPE = ['rpe', 'expected_reward', 'uncued_vs_cued', 'cue_value', 'feedback_vs_omit', 'omission_value']
-DESIGNS = {'logreward': ('nilearn_glm_reward', 'CONTRASTS'), 'rpe': ('nilearn_glm_reward_rpe', 'CONTRASTS_RPE')}
+CONTRASTS_RPE_RT = ['rpe', 'rpe_cued', 'rpe_uncued', 'cue_value', 'expected_reward', 'omission_value', 'search_rt']
+DESIGNS = {'logreward': ('nilearn_glm_reward', 'CONTRASTS'), 'rpe': ('nilearn_glm_reward_rpe', 'CONTRASTS_RPE'),
+           'rpe_rt': ('nilearn_glm_reward_rpe_rt', 'CONTRASTS_RPE_RT')}
 
 
 def contrasts_for(design):
@@ -121,7 +123,7 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--bids-folder', default='/shares/zne.uzh/gdehol/ds-valuecapture')
     ap.add_argument('--subjects', nargs='+', default=[f'{i:02d}' for i in range(4, 16)])
-    ap.add_argument('--design', choices=['logreward', 'rpe'], default='logreward')
+    ap.add_argument('--design', choices=list(DESIGNS), default='logreward')
     ap.add_argument('--contrasts', nargs='+', default=None)
     ap.add_argument('--n-perm', type=int, default=5000)   # n = 12 has only 4096 distinct sign flips
     ap.add_argument('--n-jobs', type=int, default=16)
