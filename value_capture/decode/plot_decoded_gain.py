@@ -26,7 +26,10 @@ mpl.rcParams.update({'font.family': 'Helvetica', 'font.size': 7, 'axes.labelsize
 ROIS = ['V1', 'V2', 'V3', 'hV4', 'LO']     # V3AB has only ~30 voxels with a usable PRF
 MAP_ROIS = ['V1', 'V2', 'V3']
 PATHWAYS = {'Early': ['V1', 'V2', 'V3'], 'Ventral': ['hV4', 'VO', 'LO', 'TO'], 'Dorsal': ['V3AB', 'IPS']}
-HIGH, LOW, TARGET = '#C8102E', '#1F6FB2', '#2B2B2B'
+# Conditions: Okabe-Ito colourblind-safe vermillion / blue. Difference maps: ColorBrewer PRGn (colourblind-safe,
+# diverging), so that a map's sign can never be read as a condition.
+HIGH, LOW, TARGET = '#D55E00', '#0072B2', '#2B2B2B'
+DIVERGING = 'PRGn'
 COL = {'distractor_high': HIGH, 'distractor_low': LOW, 'target': TARGET, 'high': HIGH, 'low': LOW}
 ROLE = {'target': 'Target', 'distractor_low': 'Low-value distractor', 'distractor_high': 'High-value distractor'}
 ITEM_R, ECC = .8, 4.0      # ring just around an item (1.5 deg long), clear of the bar aperture (radius 3.17 deg)
@@ -147,7 +150,7 @@ def illustrate_bar(fig, spec):
 
 
 def draw_map(ax, img, vmax, title, col, p):
-    im = ax.imshow(img, origin='lower', extent=(-5, 5, -5, 5), cmap='RdBu_r', vmin=-vmax, vmax=vmax, interpolation='bilinear')
+    im = ax.imshow(img, origin='lower', extent=(-5, 5, -5, 5), cmap=DIVERGING, vmin=-vmax, vmax=vmax, interpolation='bilinear')
     ax.add_patch(Circle((0, 0), AP_R, fill=False, ec='.3', lw=.7))
     d = ECC / np.sqrt(2)
     ax.add_patch(Circle((d, d), ITEM_R, fill=False, ec=col, lw=1.3))
@@ -172,7 +175,7 @@ def robust_limits(values, centre_lo, centre_hi, pad=.12):
     return lo - pad * r, hi + pad * r
 
 
-def panel_items(ax, items, rois):
+def panel_items(ax, items, rois, labels=True):
     s = items.groupby(['subject', 'roi', 'role'], as_index=False).pct.mean()
     order = list(ROLE)
     offs = dict(zip(order, (-.265, 0, .265)))
@@ -187,7 +190,7 @@ def panel_items(ax, items, rois):
     sns.pointplot(s, x='roi', y='pct', hue='role', order=rois, hue_order=order, palette=COL, dodge=.53, linestyle='none',
                   errorbar=('se', 1), markersize=4, err_kws={'linewidth': 1.2}, legend=False, ax=ax, zorder=3)
     ax.axhline(0, color='.35', lw=.8, ls=(0, (3, 2)))
-    ax.set_ylim(ymin, ymax), ax.set_xlim(-.95, len(rois) - .45)
+    ax.set_ylim(ymin, ymax), ax.set_xlim(-.95 if labels else -.55, len(rois) - .45)
     for i, r in enumerate(rois):
         w = s[s.roi == r].pivot(index='subject', columns='role', values='pct')
         for role in order:
@@ -203,9 +206,10 @@ def panel_items(ax, items, rois):
         ax.plot([i, i, i + .265, i + .265], [y - .025 * span, y, y, y - .025 * span], color='.25', lw=.7)
         ax.text(i + .1325, y + .015 * span, fmt_p(p), ha='center', va='bottom', fontsize=5.8,
                 weight='bold' if p < .05 else 'normal')
-    ax.text(-.93, lo - .1 * span, 'p vs\nneutral', ha='left', va='center', fontsize=5.8, color='.3', linespacing=.95)
-    ax.text(-.93, .012 * span, 'Neutral items', ha='left', va='bottom', fontsize=6.2, color='.25')
-    ax.set(xlabel='', ylabel='Change vs neutral (%)')
+    if labels:
+        ax.text(-.93, lo - .1 * span, 'p vs\nneutral', ha='left', va='center', fontsize=5.8, color='.3', linespacing=.95)
+        ax.text(-.93, .012 * span, 'Neutral items', ha='left', va='bottom', fontsize=6.2, color='.25')
+    ax.set(xlabel='', ylabel='Change vs neutral (%)' if labels else '')
     sns.despine(ax=ax, offset=4, trim=False)
 
 
@@ -277,11 +281,14 @@ def main(in_dir, out):
     row = gs[1].subgridspec(1, 2, width_ratios=[1, 3.3], wspace=.3)
     a = illustrate_items(fig, row[0])
     a.text(-.2, 1.3, 'c', transform=a.transAxes, fontsize=10, weight='bold')
-    ax = fig.add_subplot(row[1])
-    panel_items(ax, items, rois)
+    early, later = [r for r in rois if r in MAP_ROIS], [r for r in rois if r not in MAP_ROIS]
+    pair = row[1].subgridspec(1, 2, width_ratios=[len(early) + .45, max(len(later), 1)], wspace=.16)
+    ax = fig.add_subplot(pair[0])
+    panel_items(ax, items[items.roi.isin(early)], early)
+    panel_items(fig.add_subplot(pair[1]), items[items.roi.isin(later)], later, labels=False)   # own y-axis: larger effects
     ax.set_title('Targets and distractors compared with the same item when it is neutral (same bar position)', loc='left', pad=9, fontsize=8)
-    for i, r in enumerate(ROLE):
-        ax.text(.005 + i * .2, 1.0, ROLE[r], color=COL[r], transform=ax.transAxes, fontsize=6.5, va='bottom')
+    for x, r in zip((.005, .17, .62), ROLE):
+        ax.text(x, 1.0, ROLE[r], color=COL[r], transform=ax.transAxes, fontsize=6.5, va='bottom')
 
     # d: bar
     row = gs[2].subgridspec(1, 2, width_ratios=[1, 3.3], wspace=.3)
