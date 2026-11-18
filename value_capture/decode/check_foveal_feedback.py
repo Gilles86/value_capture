@@ -63,11 +63,18 @@ def main(decoded_root, behaviour, out):
     fovea = {s: d[:, RADIUS <= FOVEA].mean(1) for s, d in diff.items()}
     tab = pd.DataFrame({'subject': subjects, 'points_shown': fovea[True], 'no_points': fovea[False]})
     tab['shown_minus_none'] = tab.points_shown - tab.no_points
+    d = 4 / np.sqrt(2)                   # the distractor's location in the aligned maps, ring as in plot_decoded_gain.py
+    xx, yy = np.meshgrid(AXIS, AXIS)
+    ring = np.hypot(xx - d, yy - d) <= .8
+    tab['ring_points_shown'], tab['ring_no_points'] = diff[True][:, ring].mean(1), diff[False][:, ring].mean(1)
+    tab['ring_shown_minus_none'] = tab.ring_points_shown - tab.ring_no_points
+    print('distractor location:', {c: (round(float(tab[c].mean()), 5), round(signflip_p(tab[c]), 4))
+                                   for c in ('ring_points_shown', 'ring_no_points', 'ring_shown_minus_none')})
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     tab.to_csv(f'{out}.tsv', sep='\t', index=False)
     ps = {c: signflip_p(tab[c]) for c in ('points_shown', 'no_points', 'shown_minus_none')}
     print(tab.round(5).to_string(index=False))
-    print({k: round(v, 4) for k, v in ps.items()}, tab.drop(columns='subject').mean().round(5).to_dict())
+    print({k: round(v, 4) for k, v in ps.items()})
 
     mpl.rcParams.update({'font.family': 'Helvetica', 'font.size': 7, 'axes.labelsize': 8, 'axes.titlesize': 8,
                          'axes.spines.top': False, 'axes.spines.right': False, 'pdf.fonttype': 42})

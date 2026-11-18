@@ -254,7 +254,7 @@ def main(in_dir, out):
 
     fig = plt.figure(figsize=(7.25, 7.5))
     gs = fig.add_gridspec(3, 1, height_ratios=[1.3, 1.05, .95], hspace=.52, left=.065, right=.985, top=.895, bottom=.07)
-    fig.text(.01, .985, f'Prototype, n = {n} subjects, decoding still running', fontsize=9, weight='bold', va='top')
+    fig.text(.01, .985, f'Prototype, n = {n} subjects', fontsize=9, weight='bold', va='top')
 
     # a, b: example display and aligned maps
     top = gs[0].subgridspec(1, 6, width_ratios=[1, 1, 1, 1, .05, .3], wspace=.07)
@@ -274,7 +274,7 @@ def main(in_dir, out):
     cb.outline.set_visible(False), cb.ax.tick_params(labelsize=6)
     cax.set_title('Δ intensity', fontsize=6.5, pad=3, loc='left')
     a0.text(-.04, 1.17, 'b', transform=a0.transAxes, fontsize=10, weight='bold')
-    a1.text(.5, 1.17, f'Decoded input in {"/".join(MAP_ROIS)}: distractor trials minus no-distractor trials',
+    a1.text(.5, 1.17, f'Decoded input in {"/".join(MAP_ROIS)} (all pixels free): distractor trials minus no-distractor trials',
             transform=a1.transAxes, ha='center', fontsize=8)
 
     # c: items
@@ -312,15 +312,18 @@ def main(in_dir, out):
 def plot_pathways(items, bars, n, out):
     """Items and bar responses averaged over the areas of each visual pathway (within subject)."""
     group = {r: g for g, rs in PATHWAYS.items() for r in rs}
-    have = {g: [r for r in rs if r in set(items.roi)] for g, rs in PATHWAYS.items()}
-    names = {g: f'{g} ({", ".join(rs)})' for g, rs in have.items() if rs}
-    label = lambda d: d.assign(roi=d.roi.map(group).map(names)).dropna(subset=['roi'])  # noqa: E731
+    per_roi = items.groupby('roi').subject.nunique()
+    have = {g: [r for r in rs if per_roi.get(r, 0) >= 5] for g, rs in PATHWAYS.items()}   # areas with usable voxels
+    used = {r for rs in have.values() for r in rs}
+    n_in = {g: items[items.roi.isin(rs)].subject.nunique() for g, rs in have.items()}
+    names = {g: f'{g} ({", ".join(rs)}), n = {n_in[g]}' for g, rs in have.items() if rs}
+    label = lambda d: d[d.roi.isin(used)].assign(roi=lambda x: x.roi.map(group).map(names))  # noqa: E731
     it = label(items).groupby(['subject', 'roi', 'role'], as_index=False).pct.mean()
     ba = label(bars).groupby(['subject', 'roi', 'aligned_to', 'value', 'distance'], as_index=False).pct.mean()
     order = list(names.values())
     fig = plt.figure(figsize=(7.25, 4.9))
     gs = fig.add_gridspec(2, 1, height_ratios=[1.1, 1], hspace=.55, left=.08, right=.985, top=.87, bottom=.1)
-    fig.text(.01, .985, f'Prototype, n = {n} subjects, decoding still running', fontsize=9, weight='bold', va='top')
+    fig.text(.01, .985, f'Prototype, n = {n} subjects', fontsize=9, weight='bold', va='top')
     ax = fig.add_subplot(gs[0])
     panel_items(ax, it, order)
     ax.set_title('Targets and distractors compared with the same item when it is neutral (same bar position)', loc='left', pad=9, fontsize=8)
