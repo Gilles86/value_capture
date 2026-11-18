@@ -29,7 +29,6 @@ from value_capture.utils.data import Subject  # noqa: E402
 
 ROIS = {'V1': (1,), 'V2': (2,), 'V3': (3,), 'hV4': (4,), 'LO': (7, 8), 'V3AB': (11, 12)}
 GAIN_LABELS = ['target', 'distractor_low', 'distractor_high']
-PRF_LABELS = ['x', 'y', 'sd', 'baseline', 'amplitude']
 
 
 def trial_table(sub, sessions, glmsingle_deriv):
@@ -60,8 +59,8 @@ def r2(y, yhat):
     return 1 - ((y - yhat) ** 2).sum(0) / ((y - y.mean(0)) ** 2).sum(0)
 
 
-def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out):
-    from braincoder.models import GainFieldPRF2D
+def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out, prf_model='gauss'):
+    from braincoder.models import GainFieldDoGPRF2D, GainFieldPRF2D
     from braincoder.optimize import ParameterFitter
 
     sub = Subject(subject, bids_folder=bids)
@@ -69,12 +68,18 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
     trials = trial_table(sub, sessions, glmsingle_deriv)
     images = fp.build_paradigm(trials, 'bar_items')                       # (trials, pixels)
     grid = fp.make_grid_coordinates()
-    model = GainFieldPRF2D(grid_coordinates=grid, field_positions=fp.ITEM_XY, gain_labels=GAIN_LABELS)
+    model_class = {'gauss': GainFieldPRF2D, 'dog': GainFieldDoGPRF2D}[prf_model]
+    model = model_class(grid_coordinates=grid, field_positions=fp.ITEM_XY, gain_labels=GAIN_LABELS)
+    prf_labels = model.prf_parameter_labels()
     paradigm = model.make_paradigm(images, assignments(trials))
 
-    pars_all = pd.read_csv(Path(bids) / 'derivatives' / prf_deriv / f'sub-{subject}' / 'ses-all' / 'func' /
+    def read_prf(deriv):
+        return pd.read_csv(Path(bids) / 'derivatives' / deriv / f'sub-{subject}' / 'ses-all' / 'func' /
                            f'sub-{subject}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv',
                            sep='\t', index_col=0)
+    pars_all = read_prf(prf_deriv)            # voxels are selected on the Gaussian fit, for every PRF model
+    pars_model = pars_all if prf_model == 'gauss' else read_prf(f'{prf_deriv}_{prf_model}')
+    assert len(pars_model) == len(pars_all)
     mask = fp._get_gm_mask(sub, sessions[0], bids, .1)
     Y = masking.apply_mask(sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv),
                            mask).astype(np.float32)
@@ -82,11 +87,12 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
     varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0]), mask))
     rows = []
     for roi in rois:
-        sel = np.flatnonzero(np.isin(varea, ROIS[roi]) & (pars_all.r2.to_numpy() >= min_r2))
+        sel = np.flatnonzero(np.isin(varea, ROIS[roi]) & (pars_all.r2.to_numpy() >= min_r2)
+                             & np.isfinite(pars_model[prf_labels].to_numpy()).all(1))
         if len(sel) < 10:
             print(f'{roi}: {len(sel)} voxels, skipped', flush=True)
             continue
-        prf = pars_all.iloc[sel][PRF_LABELS].reset_index(drop=True).astype(np.float32)
+        prf = pars_model.iloc[sel][prf_labels].reset_index(drop=True).astype(np.float32)
         data = pd.DataFrame(Y[:, sel], index=paradigm.index)
         init = model.add_field_parameters(prf, field_sigma=1.5)
 
@@ -135,8 +141,11 @@ if __name__ == '__main__':
     ap.add_argument('--n-iter', type=int, default=2000)
     ap.add_argument('--learning-rate', type=float, default=.01)
     ap.add_argument('--out', default=None)
+    ap.add_argument('--prf-model', choices=['gauss', 'dog'], default='gauss',
+                    help='PRF under the gain field; dog reads <prf-deriv>_dog and writes to gain_fields_dog')
     a = ap.parse_args()
-    out = a.out or (f'/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/gain_fields/'
+    folder = 'gain_fields' if a.prf_model == 'gauss' else f'gain_fields_{a.prf_model}'
+    out = a.out or (f'/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/{folder}/'
                     f'sub-{a.subject}_gain_fields.tsv')
     main(a.subject, a.rois, a.bids_folder, a.prf_deriv, a.glmsingle_deriv, a.min_r2, a.per_run, a.n_iter,
-         a.learning_rate, out)
+         a.learning_rate, out, prf_model=a.prf_model)
