@@ -90,7 +90,14 @@ def bar_condition_label(row):
     return f'bar_{pos:.2f}_{ori}'
 
 
-def build_condition_index(all_events):
+FEEDBACK_CONDITIONS = ('feedback_high', 'feedback_low')
+
+
+def feedback_condition_label(row):
+    return 'feedback_high' if row['value_rank'] == 2 else 'feedback_low'
+
+
+def build_condition_index(all_events, feedback_events=False):
     """Build a global {condition_label: column_index} map from all runs/sessions.
 
     The same bar position/orientation must always get the same column so that
@@ -107,7 +114,11 @@ def build_condition_index(all_events):
         rest = parts[1].rsplit('_', 1)  # ['-2.85', 'vertical']
         return (rest[1], float(rest[0]))
 
-    return {c: i for i, c in enumerate(sorted(conditions, key=_sort_key))}
+    idx = {c: i for i, c in enumerate(sorted(conditions, key=_sort_key))}
+    if feedback_events:          # points displays as their own single-trial events (after the bar conditions)
+        for c in FEEDBACK_CONDITIONS:
+            idx[c] = len(idx)
+    return idx
 
 
 def upsample_bold(bold_4d, factor):
@@ -130,7 +141,7 @@ def upsample_bold(bold_4d, factor):
     return up.reshape(x, y, z, n_new)
 
 
-def build_design_matrix(events, n_vols, condition_to_idx, tr=TR):
+def build_design_matrix(events, n_vols, condition_to_idx, tr=TR, feedback_events=False):
     """Return (dm, trial_order, trial_metadata) for one run.
 
     Parameters
@@ -153,6 +164,11 @@ def build_design_matrix(events, n_vols, condition_to_idx, tr=TR):
     n_removed = int(round((total_pulses - n_vols_native) * TR / tr))
 
     target_events = events[events['event_type'] == 'target'].sort_values('onset')
+    if feedback_events:
+        fb = events[(events['event_type'] == 'feedback') & events['show_feedback'].isin([True, 'True'])]
+        target_events = pd.concat([target_events.assign(_event='target'), fb.assign(_event='feedback')]).sort_values('onset')
+    else:
+        target_events = target_events.assign(_event='target')
 
     n_conds = len(condition_to_idx)
     dm = np.zeros((n_vols, n_conds))
@@ -163,11 +179,12 @@ def build_design_matrix(events, n_vols, condition_to_idx, tr=TR):
         dm_row = int(np.round(row['onset'] / tr)) - n_removed
         dm_row = max(0, min(dm_row, n_vols - 1))
 
-        cond = bar_condition_label(row)
+        cond = bar_condition_label(row) if row['_event'] == 'target' else feedback_condition_label(row)
         dm[dm_row, condition_to_idx[cond]] = 1.0
         trial_order.append(cond)
         trial_metadata.append({
             'condition': cond,
+            'event': row['_event'],
             'bar_position': row['bar_position'],
             'bar_orientation': row['bar_orientation'],
             'value_rank': row['value_rank'],
@@ -217,14 +234,15 @@ def _patch_runwise_fir(n_runs):
 
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmriprep',
-         fwhm=0, debug=False, feedback_regressors_on=False):
+         fwhm=0, debug=False, feedback_regressors_on=False, feedback_events=False):
     sub = Subject(subject, bids_folder=bids_folder)
 
     if sessions is None:
         sessions = sub.get_sessions()
 
     ses_label = f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
-    glmsingle_deriv = (f'glmsingle_s{fwhm}mm' if fwhm else 'glmsingle') + ('_fbreg' if feedback_regressors_on else '')
+    glmsingle_deriv = ((f'glmsingle_s{fwhm}mm' if fwhm else 'glmsingle') + ('_fbreg' if feedback_regressors_on else '')
+                       + ('_fbevents' if feedback_events else ''))
     print(f'sub-{subject}  {ses_label}  [{fmriprep_deriv}]  fwhm={fwhm}mm  → {glmsingle_deriv}')
 
     # First pass: collect all events to build a globally consistent condition map
@@ -235,9 +253,8 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
         session_run_events[session] = (runs, events_list)
 
     condition_to_idx = build_condition_index(
-        ev for session, (runs, events_list) in session_run_events.items()
-        for ev in events_list
-    )
+        (ev for session, (runs, events_list) in session_run_events.items()
+         for ev in events_list), feedback_events=feedback_events)
     print(f'  {len(condition_to_idx)} bar conditions: {sorted(condition_to_idx)}')
 
     # Second pass: load BOLD and build design matrices
@@ -267,7 +284,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
             n_vols_up = bold_data.shape[3]
 
             dm, trial_order, trial_meta = build_design_matrix(
-                events, n_vols_up, condition_to_idx, tr=TR_UP)
+                events, n_vols_up, condition_to_idx, tr=TR_UP, feedback_events=feedback_events)
 
             total_pulses = len(events[events['event_type'] == 'pulse'])
             n_removed = total_pulses - n_vols
@@ -312,15 +329,22 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
 
     fn_base = (f'sub-{subject}_{ses_label}_task-valuecapture'
                f'_space-T1w_desc-{{desc}}')
-    image.new_img_like(ref_bold, betas).to_filename(
-        str(out_dir / (fn_base.format(desc='target') + '_pe.nii.gz')))
+    trials_df = pd.DataFrame(all_trial_metadata)
+    assert len(trials_df) == betas.shape[-1], (len(trials_df), betas.shape)
+    # betas are in chronological order over all events; write the search-display (target) betas as before and,
+    # with --feedback-events, the points-display betas separately
+    for ev in ('target', 'feedback'):
+        sel = (trials_df['event'] == ev).to_numpy()
+        if not sel.any():
+            continue
+        img = image.new_img_like(ref_bold, np.asarray(betas[..., sel], np.float32))
+        img.set_data_dtype(np.float32)
+        img.to_filename(str(out_dir / (fn_base.format(desc=ev) + '_pe.nii.gz')))
+        trials_df[sel].drop(columns='event').to_csv(
+            str(out_dir / (fn_base.format(desc=ev) + '_trials.tsv')), sep='\t', index=False)
     image.new_img_like(ref_bold, results['typed']['R2']).to_filename(
         str(out_dir / (fn_base.format(desc='R2') + '_pe.nii.gz')))
 
-    trials_df = pd.DataFrame(all_trial_metadata)
-    trials_df.to_csv(
-        str(out_dir / (fn_base.format(desc='target') + '_trials.tsv')),
-        sep='\t', index=False)
 
     print(f'\nSaved to {out_dir}')
     print(f'  beta volume: {betas.shape}  ({betas.shape[3]} total trials)')
@@ -341,6 +365,9 @@ if __name__ == '__main__':
     parser.add_argument('--feedback-regressors', action='store_true',
                         help='Model the points displays as nuisance regressors (high/low multiplier); output '
                              'glmsingle[_sNmm]_fbreg.')
+    parser.add_argument('--feedback-events', action='store_true',
+                        help='Model each shown points display as its own single-trial event (conditions '
+                             'feedback_high / feedback_low); writes desc-feedback betas too; output *_fbevents.')
     parser.add_argument('--debug', action='store_true',
                         help='Write outputs and figures for all 4 GLMsingle model steps.')
     args = parser.parse_args()
@@ -350,4 +377,5 @@ if __name__ == '__main__':
          fmriprep_deriv=args.fmriprep_deriv,
          fwhm=args.fwhm,
          debug=args.debug,
-         feedback_regressors_on=args.feedback_regressors)
+         feedback_regressors_on=args.feedback_regressors,
+         feedback_events=args.feedback_events)
