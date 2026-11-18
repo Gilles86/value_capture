@@ -12,4 +12,4 @@ SUB=$(printf "%02d" "$SLURM_ARRAY_TASK_ID")
 export TMPDIR="/scratch/$USER/tmp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"; mkdir -p "$TMPDIR"
 cd "$HOME/git/value_capture"
 exec $HOME/data/conda/envs/value_capture/bin/python -u value_capture/glm/fit_nilearn_glm_reward.py "$SUB" \
-    --bids-folder /shares/zne.uzh/gdehol/ds-valuecapture --n-jobs 8
+    --bids-folder /shares/zne.uzh/gdehol/ds-valuecapture --n-jobs 8 --design "${DESIGN:-logreward}"

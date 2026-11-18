@@ -13,16 +13,17 @@ import numpy as np
 import pandas as pd
 from nilearn.glm.second_level import SecondLevelModel
 
-from value_capture.glm.fit_second_level_perm import CONTRASTS, SPACE
+from value_capture.glm.fit_second_level_perm import DESIGNS, SPACE, contrasts_for
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--bids-folder', default='/shares/zne.uzh/gdehol/ds-valuecapture')
+ap.add_argument('--design', choices=['logreward', 'rpe'], default='logreward')
 ap.add_argument('--subjects', nargs='+', default=[f'{i:02d}' for i in range(4, 16)])
 a = ap.parse_args()
-root = Path(a.bids_folder) / 'derivatives' / 'nilearn_glm_reward'
+root = Path(a.bids_folder) / 'derivatives' / DESIGNS[a.design][0]
 out = root / 'group_quick'
 out.mkdir(parents=True, exist_ok=True)
-for con in CONTRASTS:
+for con in contrasts_for(a.design):
     imgs = [root / f'sub-{s}' / 'func' / f'sub-{s}_task-valuecapture_{SPACE}_contrast-{con}_stat-effect_statmap.nii.gz'
             for s in a.subjects]
     imgs = [str(i) for i in imgs if i.exists()]

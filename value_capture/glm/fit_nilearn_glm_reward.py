@@ -57,8 +57,45 @@ CONTRASTS = {
     'feedback_vs_omit': '(fb_cued + fb_uncued) / 2 - (omit_high + omit_low + omit_absent) / 3',
     'omission_value': 'omit_high - omit_low',
 }
+# Design 'rpe': reward relative to what the cue predicts. Feedback split by cue (high colour, low colour, no
+# distractor = unpredicted), each unmodulated, plus ONE modulator over all shown feedback:
+#   rpe = log(1 + points) − mean log(1 + points) of that cue condition (in this run)
+# For cued trials the multiplier is predicted, so the rpe is only the within-multiplier variation (speed);
+# for uncued trials it also carries the unpredicted ×100 vs ×1. The condition means carry the predicted part.
+CONTRASTS_RPE = {
+    'cue_value': 'search_high - search_low',
+    'rpe': 'fb_rpe',                                                      # reward over and above the cue's prediction
+    'expected_reward': 'fb_cue_high - fb_cue_low',                       # outcome response, high vs low predicted
+    'uncued_vs_cued': 'fb_uncued - (fb_cue_high + fb_cue_low) / 2',     # unpredicted vs predicted feedback, mean
+    'feedback_vs_omit': '(fb_cue_high + fb_cue_low + fb_uncued) / 3 - (omit_high + omit_low + omit_absent) / 3',
+    'omission_value': 'omit_high - omit_low',
+}
 CONFOUNDS = ['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z', 'framewise_displacement', 'dvars'] + \
     [f'a_comp_cor_{i:02d}' for i in range(7)]
+
+
+def build_events_rpe(ev, n_removed):
+    off = n_removed * TR
+    rows = []
+    for _, r in ev[ev.event_type == 'target'].iterrows():
+        lab = 'search_absent' if not r.distractor_present else ('search_high' if r.value_rank == 2 else 'search_low')
+        rows.append(dict(onset=r.onset - off, duration=1.75, trial_type=lab, modulation=1.))
+    fb = ev[ev.event_type == 'feedback'].copy()
+    fb['shown'] = fb.show_feedback.isin([True, 'True'])
+    cued = fb.distractor_present.isin([True, 'True'])
+    fb['cue'] = np.where(cued, np.where(fb.value_rank == 2, 'cue_high', 'cue_low'), 'uncued')
+    fb['logp'] = np.log1p(fb.earned_points.fillna(0).astype(float))
+    m = fb[fb.shown].groupby('cue').logp.mean()
+    fb['rpe'] = fb.logp - fb.cue.map(m).fillna(0)
+    for _, r in fb.iterrows():
+        on = r.onset - off
+        if r.shown:
+            rows.append(dict(onset=on, duration=1.0, trial_type=f'fb_{r.cue}', modulation=1.))
+            rows.append(dict(onset=on, duration=1.0, trial_type='fb_rpe', modulation=r.rpe))
+        else:
+            lab = {'cue_high': 'omit_high', 'cue_low': 'omit_low', 'uncued': 'omit_absent'}[r.cue]
+            rows.append(dict(onset=on, duration=1.0, trial_type=lab, modulation=1.))
+    return pd.DataFrame(rows).sort_values('onset').reset_index(drop=True)
 
 
 def build_events(ev, n_removed):
@@ -92,7 +129,7 @@ def confounds(sub, session, run, fmriprep_deriv):
     return df[cols].fillna(0)
 
 
-def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deriv='fmriprep'):
+def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deriv='fmriprep', design='logreward'):
     sub = Subject(subject, bids_folder=bids_folder)
     sessions = sub.get_sessions()
     space_tag = f'space-{space}' + (f'_res-{res}' if res else '')
@@ -104,7 +141,7 @@ def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deri
             raw = sub.get_onsets(ses, run)
             n_vols = image.load_img(str(bold)).shape[3]
             n_removed = len(raw[raw.event_type == 'pulse']) - n_vols
-            ev = build_events(raw, n_removed)
+            ev = (build_events_rpe if design == 'rpe' else build_events)(raw, n_removed)
             imgs.append(str(bold))
             start_times.append(json.loads(Path(str(bold).replace('.nii.gz', '.json')).read_text()).get('StartTime', 0.))
             evs.append(ev)
@@ -121,11 +158,12 @@ def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deri
                             mask_img=sub.get_brain_mask(sessions[0], fmriprep_deriv=fmriprep_deriv,
                                                         space=space, res=res))
     model.fit(imgs, events=evs, confounds=confs)
-    out = Path(bids_folder) / 'derivatives' / 'nilearn_glm_reward' / f'sub-{subject}' / 'func'
+    deriv = 'nilearn_glm_reward' + ('_rpe' if design == 'rpe' else '')
+    out = Path(bids_folder) / 'derivatives' / deriv / f'sub-{subject}' / 'func'
     out.mkdir(parents=True, exist_ok=True)
     from nilearn.glm.contrasts import expression_to_contrast_vector
     import re
-    for name, expr in CONTRASTS.items():
+    for name, expr in (CONTRASTS_RPE if design == 'rpe' else CONTRASTS).items():
         # Per-run contrast vectors: a run that lacks one of the contrast's regressors (e.g. no uncued
         # low-reward feedback in that run) gets a null vector and is left out of the fixed-effects combination,
         # instead of failing the whole subject (KeyError) or biasing the contrast.
@@ -154,5 +192,7 @@ if __name__ == '__main__':
     ap.add_argument('--res', default='2')
     ap.add_argument('--smoothing-fwhm', type=float, default=6.)
     ap.add_argument('--n-jobs', type=int, default=8)
+    ap.add_argument('--design', choices=['logreward', 'rpe'], default='logreward',
+                    help="'rpe': reward relative to the cue's prediction -> nilearn_glm_reward_rpe")
     a = ap.parse_args()
-    main(a.subject, a.bids_folder, a.space, a.res, a.smoothing_fwhm, a.n_jobs)
+    main(a.subject, a.bids_folder, a.space, a.res, a.smoothing_fwhm, a.n_jobs, design=a.design)

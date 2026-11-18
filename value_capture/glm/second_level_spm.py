@@ -21,7 +21,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from value_capture.glm.fit_second_level_perm import CONTRASTS, SPACE, reward_rois
+from value_capture.glm.fit_second_level_perm import DESIGNS, SPACE, contrasts_for, reward_rois
 
 SPM = '/shares/zne.uzh/containers/spm12'
 
@@ -70,8 +70,8 @@ end
 """
 
 
-def main(bids, subjects, matlab, contrasts):
-    root = Path(bids) / 'derivatives' / 'nilearn_glm_reward'
+def main(bids, subjects, matlab, contrasts, design='logreward'):
+    root = Path(bids) / 'derivatives' / DESIGNS[design][0]
     mask_gz = root / 'group_spm' / 'reward_mask.nii.gz'
     if not mask_gz.exists():          # same a-priori mask as the permutation SVC (Harvard-Oxford reward ROIs)
         import numpy as np
@@ -111,7 +111,8 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--bids-folder', default='/shares/zne.uzh/gdehol/ds-valuecapture')
     ap.add_argument('--subjects', nargs='+', default=[f'{i:02d}' for i in range(4, 16)])
-    ap.add_argument('--contrasts', nargs='+', default=CONTRASTS)
+    ap.add_argument('--design', choices=['logreward', 'rpe'], default='logreward')
+    ap.add_argument('--contrasts', nargs='+', default=None)
     ap.add_argument('--matlab', required=True)
     a = ap.parse_args()
-    main(a.bids_folder, a.subjects, a.matlab, a.contrasts)
+    main(a.bids_folder, a.subjects, a.matlab, a.contrasts or contrasts_for(a.design), a.design)

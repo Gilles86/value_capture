@@ -30,6 +30,14 @@ from scipy import stats
 
 CONTRASTS = ['outcome_logreward', 'outcome_logreward_cued', 'outcome_logreward_uncued', 'outcome_rpe', 'cue_value',
              'capture', 'feedback_vs_omit', 'omission_value']
+CONTRASTS_RPE = ['rpe', 'expected_reward', 'uncued_vs_cued', 'cue_value', 'feedback_vs_omit', 'omission_value']
+DESIGNS = {'logreward': ('nilearn_glm_reward', 'CONTRASTS'), 'rpe': ('nilearn_glm_reward_rpe', 'CONTRASTS_RPE')}
+
+
+def contrasts_for(design):
+    return globals()[DESIGNS[design][1]]
+
+
 SPACE = 'space-MNI152NLin2009cAsym_res-2'
 
 
@@ -55,8 +63,8 @@ def sign_flip_p(x):
     return float((np.abs(null) >= abs(x.mean()) - 1e-12).mean())
 
 
-def main(bids, subjects, n_perm, n_jobs, contrasts):
-    root = Path(bids) / 'derivatives' / 'nilearn_glm_reward'
+def main(bids, subjects, n_perm, n_jobs, contrasts, design='logreward'):
+    root = Path(bids) / 'derivatives' / DESIGNS[design][0]
     out = root / 'group'
     out.mkdir(parents=True, exist_ok=True)
     roi_rows, subj_rows = [], []
@@ -113,8 +121,9 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--bids-folder', default='/shares/zne.uzh/gdehol/ds-valuecapture')
     ap.add_argument('--subjects', nargs='+', default=[f'{i:02d}' for i in range(4, 16)])
-    ap.add_argument('--contrasts', nargs='+', default=CONTRASTS)
+    ap.add_argument('--design', choices=['logreward', 'rpe'], default='logreward')
+    ap.add_argument('--contrasts', nargs='+', default=None)
     ap.add_argument('--n-perm', type=int, default=5000)   # n = 12 has only 4096 distinct sign flips
     ap.add_argument('--n-jobs', type=int, default=16)
     a = ap.parse_args()
-    main(a.bids_folder, a.subjects, a.n_perm, a.n_jobs, a.contrasts)
+    main(a.bids_folder, a.subjects, a.n_perm, a.n_jobs, a.contrasts or contrasts_for(a.design), a.design)
