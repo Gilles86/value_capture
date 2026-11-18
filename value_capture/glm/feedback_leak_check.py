@@ -26,13 +26,14 @@ ap = argparse.ArgumentParser()
 ap.add_argument('--bids-folder', default='/shares/zne.uzh/gdehol/ds-valuecapture')
 ap.add_argument('--subjects', nargs='+', default=[f'{i:02d}' for i in range(4, 16)])
 ap.add_argument('--prf-deriv', default='prf_glmsingle')
+ap.add_argument('--glmsingle-deriv', default='glmsingle')
 ap.add_argument('--out', default='notes/data/feedback_leak.tsv')
 a = ap.parse_args()
 rows = []
 for s in a.subjects:
     sub = Subject(s, bids_folder=a.bids_folder)
     ses = sub.get_sessions()
-    tr = sub.get_trial_metadata(ses, glmsingle_deriv='glmsingle').reset_index(drop=True)
+    tr = sub.get_trial_metadata(ses, glmsingle_deriv=a.glmsingle_deriv).reset_index(drop=True)
     fb = pd.concat([sub.get_onsets(int(se), int(r)).query("event_type == 'feedback'")
                     [['trial_nr', 'show_feedback']].assign(session=se, run=r)
                     for (se, r), _ in tr.groupby(['session', 'run'])]).drop_duplicates(['session', 'run', 'trial_nr'])
@@ -45,7 +46,7 @@ for s in a.subjects:
     pars = pd.read_csv(Path(a.bids_folder) / 'derivatives' / a.prf_deriv / f'sub-{s}' / 'ses-all' / 'func' /
                        f'sub-{s}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv', sep='\t', index_col=0)
     keep = np.flatnonzero(pars.r2.to_numpy() >= .1)
-    Y = masking.apply_mask(sub.get_single_trial_estimates(ses, glmsingle_deriv='glmsingle'), mask)[:, keep]
+    Y = masking.apply_mask(sub.get_single_trial_estimates(ses, glmsingle_deriv=a.glmsingle_deriv), mask)[:, keep]
     varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=ses[0]), mask))[keep]
     img = tr.bar_orientation + tr.bar_position.round(3).astype(str)
     means = pd.DataFrame(Y).groupby(img.values).transform('mean').to_numpy()
