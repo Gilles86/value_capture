@@ -112,9 +112,14 @@ def readout(decoded, paradigm, trials, imasks, grid):
 
 
 def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders, l2_norm, learning_rate,
-         max_iter, min_iter, out_root, gm_threshold=.1, resid_max_iter=2000, glmsingle_deriv='glmsingle_fbreg'):
-    from braincoder.models import GaussianPRF2D
+         max_iter, min_iter, out_root, gm_threshold=.1, resid_max_iter=2000, glmsingle_deriv='glmsingle_fbreg',
+         model_kind='gauss'):
+    from braincoder.models import (DifferenceOfGaussiansPRF2D, DivisiveNormalizationGaussianPRF2D,
+                                   GaussianPRF2D)
     from braincoder.optimize import ResidualFitter, StimulusFitter
+
+    model_class = {'gauss': GaussianPRF2D, 'dog': DifferenceOfGaussiansPRF2D,
+                   'dn': DivisiveNormalizationGaussianPRF2D}[model_kind]
 
     sub = Subject(subject, bids_folder=bids_folder)
     sessions = sub.get_sessions()
@@ -123,6 +128,13 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
                / f'sub-{subject}' / 'ses-all' / 'func')
     pars_all = pd.read_csv(prf_dir / f'sub-{subject}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv',
                            sep='\t', index_col=0)
+    pars_model = pars_all
+    if model_kind != 'gauss':     # robustness check: same voxels (selected on the Gaussian fit), other encoding model
+        model_dir = (Path(bids_folder) / 'derivatives' / f'prf_glmsingle_items_train-ses{train_session}_{model_kind}'
+                     / f'sub-{subject}' / 'ses-all' / 'func')
+        pars_model = pd.read_csv(model_dir / f'sub-{subject}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv',
+                                 sep='\t', index_col=0)
+        assert len(pars_model) == len(pars_all), (len(pars_model), len(pars_all))
 
     betas = sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv)   # points displays modelled out
     trials = fp.add_item_info(sub, sub.get_trial_metadata(sessions, glmsingle_deriv=glmsingle_deriv).reset_index(drop=True))
@@ -145,14 +157,19 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
 
     for roi in rois:
         sel = np.flatnonzero(np.isin(np.round(varea), ROIS[roi]) & (pars_all.r2.to_numpy() >= min_r2)
-                             & np.isfinite(pars_all.r2.to_numpy()))
+                             & np.isfinite(pars_all.r2.to_numpy())
+                             & np.isfinite(pars_model[model_class.parameter_labels].to_numpy()).all(1))
         if len(sel) > max_voxels:
             sel = sel[np.argsort(-pars_all.r2.to_numpy()[sel])[:max_voxels]]
         if len(sel) < 20:
             print(f'{roi}: {len(sel)} voxels, skipped', flush=True)
             continue
         print(f'{roi}: {len(sel)} voxels (train R² >= {min_r2})', flush=True)
-        pars = pars_all.iloc[sel][['x', 'y', 'sd', 'baseline', 'amplitude']].reset_index(drop=True).astype(np.float32)
+        pars = pars_model.iloc[sel][model_class.parameter_labels].reset_index(drop=True).astype(np.float32)
+        # The tuning-similarity term of the noise model always comes from the Gaussian PRFs, so that the encoding
+        # model is the only thing that differs between the robustness checks.
+        gauss_pars = pars_all.iloc[sel][['x', 'y', 'sd', 'baseline', 'amplitude']].reset_index(drop=True).astype(np.float32)
+        wwt = GaussianPRF2D(grid_coordinates=grid).get_pseudoWWT(parameters=gauss_pars)
 
         def frame(a):
             return pd.DataFrame(a, index=pd.Index(np.arange(len(a)), name='frame'))
@@ -160,9 +177,9 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
         tr_data, tr_par = frame(Y[is_train][:, sel]), frame(paradigm[is_train])
         te_data = frame(Y[~is_train][:, sel])
         t0 = time.time()
-        model = GaussianPRF2D(grid_coordinates=grid)
+        model = model_class(grid_coordinates=grid)
         omega, dof = ResidualFitter(model=model, data=tr_data, paradigm=tr_par, parameters=pars).fit(
-            max_n_iterations=resid_max_iter, progressbar=False, method='gauss')
+            max_n_iterations=resid_max_iter, progressbar=False, method='gauss', WWT=wwt)
         print(f'  noise model on {is_train.sum()} training trials: {time.time() - t0:.0f} s', flush=True)
         for dec in decoders:
             t0 = time.time()
@@ -176,7 +193,7 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
             ro = readout(decoded, paradigm[~is_train], trials[~is_train].reset_index(drop=True), imasks, grid)
             true_r = [np.corrcoef(decoded[k], paradigm[~is_train][k])[0, 1] for k in range(len(decoded))]
             ro = ro.assign(subject=subject, roi=roi, decoder=dec, n_voxels=len(sel), r_true=true_r,
-                           train_session=train_session)
+                           train_session=train_session, encoding_model=model_kind)
             stem = f'ses-{test_session}_roi-{roi}_dec-{dec}'
             ro.to_csv(out_root / f'readout_{stem}.tsv', sep='\t', index=False)
             np.savez_compressed(out_root / f'decoded_{stem}.npz', decoded=decoded.astype(np.float16),
@@ -199,7 +216,10 @@ if __name__ == '__main__':
     ap.add_argument('--max-iter', type=int, default=1000)
     ap.add_argument('--min-iter', type=int, default=200)
     ap.add_argument('--glmsingle-deriv', default='glmsingle_fbreg')
+    ap.add_argument('--model', choices=['gauss', 'dog', 'dn'], default='gauss',
+                    help='encoding model; dog / dn write to <out-root>_<model> (voxels still selected on the Gaussian fit)')
     ap.add_argument('--out-root', default='/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/decoded_trials')
     a = ap.parse_args()
+    out_root = a.out_root if a.model == 'gauss' else f'{a.out_root}_{a.model}'
     main(a.subject, a.test_session, a.rois, a.bids_folder, a.max_voxels, a.min_r2, a.decoders, a.l2_norm,
-         a.learning_rate, a.max_iter, a.min_iter, a.out_root, glmsingle_deriv=a.glmsingle_deriv)
+         a.learning_rate, a.max_iter, a.min_iter, out_root, glmsingle_deriv=a.glmsingle_deriv, model_kind=a.model)

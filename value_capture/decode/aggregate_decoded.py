@@ -1,0 +1,154 @@
+"""Reduce the trial-wise decoded images (decode_trials.py) to gain summaries per subject, session and ROI.
+
+Every comparison is made against physically matching trials, because identical items decode very differently by
+location (PRF coverage) and are brighter when the bar is close:
+
+  items: decoded intensity of the diagonal item when it is target or distractor, minus the same item at the same
+         bar position when it is neutral, in % of that item's neutral mean.
+  bar:   decoded bar intensity minus the no-distractor trials at the same bar position, binned by distance from the
+         distractor (or target), in % of the mean decoded bar intensity on no-distractor trials.
+  maps:  the same difference over the whole image, rotated so that the distractor is at the upper right and
+         reflected so that an adjacent target is at the upper left, averaged per distractor value.
+
+Files older than --since are ignored (earlier outputs of a discarded decoder live in the same folder).
+
+    python value_capture/decode/aggregate_decoded.py --decoded-root <derivatives>/decoded_trials --out-dir notes/data/decoded_gain
+"""
+import argparse
+import os
+import re
+from datetime import datetime
+from pathlib import Path
+
+os.environ.setdefault('KERAS_BACKEND', 'jax')
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from value_capture.decode.decode_trials import DIAGONALS, DIST_BINS, item_masks  # noqa: E402
+from value_capture.prf import fit_prf as fp  # noqa: E402
+
+N = fp.GRID_RES
+CANONICAL = 1             # distractor at 45 deg (upper right)
+
+
+def rotate(img, k):
+    """Rotate counter-clockwise by k × 90 deg in visual space (row = y, column = x)."""
+    return np.rot90(img, k, axes=(1, 0))
+
+
+def align(img, distractor, target):
+    """Distractor to the upper right; a target adjacent to it to the upper left."""
+    k = ((CANONICAL - int(distractor)) // 2) % 4
+    out = rotate(img, k)
+    return out.T if (int(target) + 2 * k) % 8 == 7 else out
+
+
+def check_alignment():
+    g = fp.make_grid_coordinates()
+    for d in DIAGONALS:
+        for t in DIAGONALS:
+            if t == d:
+                continue
+            blob = lambda i: (np.hypot(g.x - fp.ITEM_XY[i][0], g.y - fp.ITEM_XY[i][1]).to_numpy() < .5).reshape(N, N)  # noqa: E731
+            assert (align(blob(d), d, t) == blob(CANONICAL)).all(), (d, t)
+            assert any((align(blob(t), d, t) == blob(i)).all() for i in (3, 5)), (d, t)
+
+
+def summarise(ro, decoded, imasks, bar_masks, gx, gy):
+    """Item and bar rows and aligned difference maps of one subject × session × ROI × decoder."""
+    bars = list(zip(ro.bar_orientation, ro.bar_position.round(4)))
+    present = ro.distractor_present.astype(bool).to_numpy()
+    target, dist, rank = ro.target_location.to_numpy(), ro.distractor_location.to_numpy(), ro.value_rank.to_numpy()
+    bar_ids = pd.factorize(pd.Series(bars))[0]
+    labels = {0.: 'distractor_low', 2.: 'distractor_high'}
+
+    # items
+    item = np.array([[decoded[k][imasks[i]].mean() for i in DIAGONALS] for k in range(len(ro))])
+    item_rows = {'target': [], 'distractor_low': [], 'distractor_high': []}
+    for j, i in enumerate(DIAGONALS):
+        neutral = (target != i) & ~(present & (dist == i))
+        loc_mean = item[neutral, j].mean()
+        for b in np.unique(bar_ids):
+            here = bar_ids == b
+            if not (here & neutral).any():
+                continue
+            base = item[here & neutral, j].mean()
+            pct = 100 * (item[:, j] - base) / loc_mean
+            item_rows['target'] += list(pct[here & (target == i)])
+            for r, lab in labels.items():
+                item_rows[lab] += list(pct[here & present & (dist == i) & (rank == r)])
+    items = [dict(role=k, pct=float(np.mean(v)), n_trials=len(v)) for k, v in item_rows.items() if v]
+
+    # no-distractor baseline image per bar position
+    base = {b: decoded[(bar_ids == b) & ~present].mean(0) for b in np.unique(bar_ids) if ((bar_ids == b) & ~present).any()}
+    scale = np.mean([decoded[k][bar_masks[bars[k]]].mean() for k in np.flatnonzero(~present)])
+
+    curves, maps = [], {}
+    acc = {(who, r, b_): [] for who in ('distractor', 'target') for r in labels for b_ in range(len(DIST_BINS))}
+    sums = {r: [] for r in labels}
+    for k in np.flatnonzero(present):
+        if bar_ids[k] not in base or rank[k] not in labels:
+            continue
+        diff = decoded[k] - base[bar_ids[k]]
+        sums[rank[k]].append(align(diff.reshape(N, N), dist[k], target[k]))
+        bar = bar_masks[bars[k]]
+        for who, loc in (('distractor', dist[k]), ('target', target[k])):
+            cx, cy = fp.ITEM_XY[int(loc)]
+            dd = np.hypot(gx - cx, gy - cy)
+            for b_, (lo, hi) in enumerate(DIST_BINS):
+                q = bar & (dd >= lo) & (dd < hi)
+                if q.any():
+                    acc[who, rank[k], b_].append(100 * diff[q].mean() / scale)
+    for (who, r, b_), v in acc.items():
+        if v:
+            lo, hi = DIST_BINS[b_]
+            curves.append(dict(aligned_to=who, value=labels[r].split('_')[1], bin_lo=lo, bin_hi=hi,
+                               distance=(lo + hi) / 2, pct=float(np.mean(v)), n_trials=len(v)))
+    for r, lab in labels.items():
+        if sums[r]:
+            maps[lab.split('_')[1]] = np.mean(sums[r], 0).astype(np.float32)
+    return items, curves, maps
+
+
+def main(decoded_root, out_dir, since):
+    check_alignment()
+    since = datetime.fromisoformat(since).timestamp()
+    imasks = item_masks()
+    g = fp.make_grid_coordinates()
+    gx, gy = g.x.to_numpy(), g.y.to_numpy()
+    inside = np.hypot(gx, gy) <= fp.GEOM['radius']
+    bar_masks = {(o, round(float(p), 4)): (fp.make_bar_image(p, o).ravel() > .5) & inside
+                 for o in ('horizontal', 'vertical') for p in fp.GEOM['bar_positions']}
+    items, curves, maps = [], [], {}
+    pat = re.compile(r'sub-(\d+)/readout_ses-(\d)_roi-(\w+)_dec-(\w+)\.tsv$')
+    for f in sorted(Path(decoded_root).glob('sub-*/readout_ses-*_roi-*_dec-*.tsv')):
+        npz = f.with_name(f.name.replace('readout_', 'decoded_').replace('.tsv', '.npz'))
+        if f.stat().st_mtime < since or not npz.exists() or npz.stat().st_mtime < since:
+            continue
+        sub, ses, roi, dec = pat.search(str(f)).groups()
+        ro = pd.read_csv(f, sep='\t')
+        decoded = np.load(npz)['decoded'].astype(np.float32)
+        assert len(ro) == len(decoded), f
+        i_, c_, m_ = summarise(ro, decoded, imasks, bar_masks, gx, gy)
+        key = dict(subject=sub, session=int(ses), roi=roi, decoder=dec)
+        items += [{**key, **r} for r in i_]
+        curves += [{**key, **r} for r in c_]
+        for value, img in m_.items():
+            maps[f'{sub}|{ses}|{roi}|{dec}|{value}'] = img
+        print(f.name, sub, flush=True)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(items).to_csv(out_dir / 'item_gain.tsv', sep='\t', index=False)
+    pd.DataFrame(curves).to_csv(out_dir / 'bar_distance.tsv', sep='\t', index=False)
+    np.savez_compressed(out_dir / 'aligned_maps.npz', **maps)
+    print(out_dir, len(items), len(curves), len(maps))
+
+
+if __name__ == '__main__':
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--decoded-root', default='/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/decoded_trials')
+    ap.add_argument('--out-dir', default='notes/data/decoded_gain')
+    ap.add_argument('--since', default='2026-11-18T14:05:00', help='ignore decoder outputs older than this')
+    a = ap.parse_args()
+    main(a.decoded_root, a.out_dir, a.since)
