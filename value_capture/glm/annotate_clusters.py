@@ -135,9 +135,17 @@ def main(in_dir, out):
                 x0, y0 = .05 + col * pw, H - .3 - (row + 1) * (ph + .36)
                 ax = fig.add_axes([x0 / W, y0 / H, (pw - .08) / W, ph / H])
                 cut = {'x': r.x, 'y': r.y, 'z': r.z}[r.plane]
-                plotting.plot_stat_map(maps[r.scope], cut_coords=[cut], display_mode=r.plane, axes=ax,
-                                       colorbar=False, vmax=VMAX, cmap=CMAP, annotate=False, draw_cross=False,
-                                       black_bg=False, threshold=1e-6)
+                disp = plotting.plot_stat_map(maps[r.scope], cut_coords=[cut], display_mode=r.plane, axes=ax,
+                                              colorbar=False, vmax=VMAX, cmap=CMAP, annotate=False,
+                                              draw_cross=False, black_bg=False, threshold=1e-6,
+                                              resampling_interpolation='nearest')  # no spline overshoot at edges
+                # arrow onto this panel's cluster peak (the slice's in-plane mm coordinates)
+                u, v = {'x': (r.y, r.z), 'y': (r.x, r.z), 'z': (r.x, r.y)}[r.plane]
+                cax_ = list(disp.axes.values())[0].ax
+                du = 22 if u < 0 else -22                      # come in from the outside of the brain
+                cax_.annotate('', xy=(u, v), xytext=(u - du * 1.2, v + 24), annotation_clip=False,
+                              arrowprops=dict(arrowstyle='-|>', color='#1F2933', lw=.9, mutation_scale=7,
+                                              shrinkA=0, shrinkB=1.5))
                 spm = 'n/a' if np.isnan(r.p_spm_rft) else f'{r.p_spm_rft:.3f}'
                 svc = ', SVC' if r.scope == 'reward' else ''
                 lab = r.label if len(r.label) < 34 else r.label[:32] + '…'
