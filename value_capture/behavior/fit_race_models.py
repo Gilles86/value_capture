@@ -10,6 +10,8 @@ condition (low / high value vs none; per-subject random slopes) can change:
   advantage_ta : advantage + log a ~ cond + t0 ~ cond          (everything can move)
   neural     : minimal + the trial's decoded gains on log v_c   (target, low- and high-value distractor, neutral items;
                decode/aggregate_decoded.py, robust z within subject x session x area, averaged over --gain-rois)
+  value_neural : minimal with a value effect per subject, predicted across subjects by that subject's high - low value
+               difference in decoded gain: beta_value[s] = mu + gamma * neural[s] + sd * z[s] (neural z-scored over subjects)
 
 Value effect = high − low on each condition-dependent parameter.
 Saves the posterior, pointwise log-likelihood (PSIS-LOO), and a quantile PPC.
@@ -31,7 +33,7 @@ from fit_logrt_gains import add_gain_regressors  # noqa: E402
 from fit_race_model import DEADLINE, load  # noqa: E402
 
 COND_PARS = {'drift': ['log_vc'], 'advantage': ['log_v0', 'q'],
-             'advantage_ta': ['log_v0', 'q', 'log_a', 't0_raw'], 'minimal': [], 'neural': []}
+             'advantage_ta': ['log_v0', 'q', 'log_a', 't0_raw'], 'minimal': [], 'neural': [], 'value_neural': []}
 GAIN_TERMS = {'beta_gain_target': 'target_z', 'beta_gain_low': 'dist_low_z', 'beta_gain_high': 'dist_high_z',
               'beta_gain_neutral': 'neutral_z'}
 # 'minimal': the fewest free parameters that still describe the data —
@@ -40,11 +42,11 @@ GAIN_TERMS = {'beta_gain_target': 'target_z', 'beta_gain_low': 'dist_low_z', 'be
 #   value effect group-level only (no per-subject value slopes), a and t0 per subject.
 INIT = {'log_vc': np.log(2.5), 'log_ve': np.log(.8), 'log_v0': np.log(1.5), 'q': .5,
         'log_a': np.log(1.5), 't0_raw': 0.}
-SESSION_PAR = {'drift': 'log_vc', 'advantage': 'q', 'advantage_ta': 'q', 'minimal': 'log_vc', 'neural': 'log_vc'}
+SESSION_PAR = {'drift': 'log_vc', 'advantage': 'q', 'advantage_ta': 'q', 'minimal': 'log_vc', 'neural': 'log_vc', 'value_neural': 'log_vc'}
 
 
 def params_for(model):
-    return ['log_vc', 'log_ve', 'log_a', 't0_raw'] if model in ('drift', 'minimal', 'neural') else ['log_v0', 'q', 'log_a', 't0_raw']
+    return ['log_vc', 'log_ve', 'log_a', 't0_raw'] if model in ('drift', 'minimal', 'neural', 'value_neural') else ['log_v0', 'q', 'log_a', 't0_raw']
 
 
 def trialwise(get, model, df, xp=np):
@@ -55,8 +57,9 @@ def trialwise(get, model, df, xp=np):
         x = get(k)[s]
         if k in COND_PARS[model]:
             x = x + get(f'{k}_low')[s] * low + get(f'{k}_high')[s] * high
-        if model in ('minimal', 'neural') and k == 'log_vc':
-            x = x + get('beta_dist')[s] * (low + high) + get('beta_value') * .5 * (high - low)
+        if model in ('minimal', 'neural', 'value_neural') and k == 'log_vc':
+            value = get('beta_value')[s] if model == 'value_neural' else get('beta_value')
+            x = x + get('beta_dist')[s] * (low + high) + value * .5 * (high - low)
         if model == 'neural' and k == 'log_vc':
             for name, col in GAIN_TERMS.items():
                 x = x + get(name)[s] * df[col].values
@@ -67,7 +70,7 @@ def trialwise(get, model, df, xp=np):
         lin[k] = x
     exp = xp.exp
     sig = (lambda z: 1 / (1 + xp.exp(-z)))
-    if model in ('drift', 'minimal', 'neural'):
+    if model in ('drift', 'minimal', 'neural', 'value_neural'):
         vc, ve = exp(lin['log_vc']), exp(lin['log_ve'])
     else:
         v0 = exp(lin['log_v0'])
@@ -107,14 +110,21 @@ def build(df, model):
             P[name] = pm.Deterministic(name, g + sg * pm.Normal(f'{name}_z', 0, 1, shape=S))
 
         for k in params_for(model):
-            if model in ('minimal', 'neural') and k == 'log_ve':   # one group-level error drift
+            if model in ('minimal', 'neural', 'value_neural') and k == 'log_ve':   # one group-level error drift
                 g = pm.Normal('log_ve_mu', INIT[k], .7)
                 P[k] = pm.Deterministic(k, g * pt.ones(S))
                 continue
             hier(k, INIT[k], .7 if k != 't0_raw' else 1., .3 if k != 't0_raw' else .5)
-        if model in ('minimal', 'neural'):
+        if model in ('minimal', 'neural', 'value_neural'):
             hier('beta_dist', 0., .3, .15)
+        if model in ('minimal', 'neural'):
             P['beta_value'] = pm.Normal('beta_value', 0., .3)
+        if model == 'value_neural':
+            x = df.groupby('subj_idx').neural_value.first().reindex(range(S)).to_numpy(float)
+            x = (x - x.mean()) / x.std()
+            P['beta_value'] = pm.Deterministic('beta_value', pm.Normal('beta_value_mu', 0., .3)
+                                               + pm.Normal('gamma_neural', 0., .1) * pt.as_tensor(x)
+                                               + pm.HalfNormal('beta_value_sd', .1) * pm.Normal('beta_value_z', 0, 1, shape=S))
         if model == 'neural':
             for name in GAIN_TERMS:
                 hier(name, 0., .2, .1)
@@ -166,14 +176,20 @@ def add_gains(df, gains, rois):
     return out
 
 
-def main(model, draws, tune, post_only=False, practice=False, gains=None, gain_rois=None, gain_label='early'):
+def main(model, draws, tune, post_only=False, practice=False, gains=None, gain_rois=None, gain_label='early',
+         neural_file=None):
     import arviz as az
     import pymc as pm
     import xarray as xr
     df = load(1, practice=practice)
     if model == 'neural':
         df = add_gains(df, gains, gain_rois)
-    tag = model + ('_wpractice' if practice else '') + (f'_{gain_label}' if model == 'neural' else '')
+    if model == 'value_neural':
+        n = pd.read_csv(neural_file, sep='\t', dtype={'subject': str}).set_index('subject')[gain_label]
+        df = df.assign(subject=df.subject.astype(str).str.zfill(2))
+        df['neural_value'] = df.subject.map(n)
+        assert df.neural_value.notna().all(), 'a subject has no neural value effect'
+    tag = model + ('_wpractice' if practice else '') + (f'_{gain_label}' if model in ('neural', 'value_neural') else '')
     print(f'{len(df)} trials ({int(df.practice.sum())} practice), {int((~df.responded).sum())} no response')
     m, t0_max = build(df, model)
     out_nc = ROOT / f'notes/data/race_{tag}.nc'
@@ -213,6 +229,16 @@ def main(model, draws, tune, post_only=False, practice=False, gains=None, gain_r
         res = pd.DataFrame(rows)
         res.to_csv(ROOT / f'notes/data/decoded_gain/race_gain_effects_{gain_label}.tsv', sep='\t', index=False)
         print(res.round(4).to_string(index=False))
+    if model == 'value_neural':
+        rows = []
+        for nm in ('gamma_neural', 'beta_value_mu', 'beta_value_sd'):
+            d = post[nm].values.ravel()
+            h = az.hdi(d, hdi_prob=.95)
+            rows.append(dict(measure=gain_label, term=nm, mean=d.mean(), hdi_lo=h[0], hdi_hi=h[1], p_lt_0=(d < 0).mean(),
+                             pct_drift=100 * (np.exp(d.mean()) - 1), n_subjects=df.subj_idx.nunique()))
+        res = pd.DataFrame(rows)
+        res.to_csv(ROOT / f'notes/data/decoded_gain/race_value_neural_{gain_label}.tsv', sep='\t', index=False)
+        print(res.round(4).to_string(index=False))
     if model in ('minimal', 'neural'):
         for nm in ('beta_dist_mu', 'beta_value', 'beta_session') + (('beta_practice',) if practice else ()):
             d = post[nm].values.ravel()
@@ -248,6 +274,7 @@ if __name__ == '__main__':
     ap.add_argument('--practice', action='store_true', help='also fit the practice runs (practice offset on drift)')
     ap.add_argument('--gains', default=str(ROOT / 'notes/data/decoded_gain/trial_gains.tsv'))
     ap.add_argument('--gain-rois', nargs='+', default=['V1', 'V2', 'V3'])
-    ap.add_argument('--gain-label', default='early')
+    ap.add_argument('--gain-label', default='early', help='neural: name of the areas; value_neural: column of --neural-file')
+    ap.add_argument('--neural-file', default=str(ROOT / 'notes/data/decoded_gain/subject_value_effects_dog_regress.tsv'))
     a = ap.parse_args()
-    main(a.model, a.draws, a.tune, a.post_only, a.practice, a.gains, a.gain_rois, a.gain_label)
+    main(a.model, a.draws, a.tune, a.post_only, a.practice, a.gains, a.gain_rois, a.gain_label, a.neural_file)
