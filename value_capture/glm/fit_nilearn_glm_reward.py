@@ -83,13 +83,58 @@ CONTRASTS_RPE_RT = {
     'omission_value': 'omit_high - omit_low',
     'search_rt': 'search_rt',
 }
+# Design 'rpe_rt_gain': does the attentional gain decoded from visual cortex on a trial go with the response of the
+# striatum, over and above value? rpe_rt plus trial-wise modulators at the search display (decoded V1-V3 gain of
+# decode/aggregate_decoded.py, robust z within subject x session x ROI, averaged over ROIs): the gain at the distractor,
+# separately for high- and low-value distractors and centred within value and run (so search_high / search_low keep the
+# value effect), the gain at the target, and the gain at the neutral items (trial-wide response amplitude).
+CONTRASTS_RPE_RT_GAIN = {
+    'dist_gain': '(gain_dist_high + gain_dist_low) / 2',
+    'dist_gain_high': 'gain_dist_high',
+    'dist_gain_low': 'gain_dist_low',
+    'dist_gain_value': 'gain_dist_high - gain_dist_low',
+    'target_gain': 'gain_target',
+    'neutral_gain': 'gain_neutral',
+    'cue_value': 'search_high - search_low',
+}
+GAIN_ROIS = ('V1', 'V2', 'V3')
 CONFOUNDS = ['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z', 'framewise_displacement', 'dvars'] + \
     [f'a_comp_cor_{i:02d}' for i in range(7)]
 
 
-def build_events_rpe(ev, n_removed, rt_control=False):
-    off = n_removed * TR
+def load_trial_gains(bids_folder, subject, rois=GAIN_ROIS):
+    """Per trial: robust z of the decoded gains (within session x ROI, clipped at ±3), averaged over the ROIs."""
+    fn = Path(bids_folder) / 'derivatives' / 'decoded_gain' / 'trial_gains.tsv'
+    g = pd.read_csv(fn, sep='\t', dtype={'subject': str})
+    g = g[(g.subject == subject) & g.roi.isin(rois)].copy()
+    assert len(g), f'no decoded gains for sub-{subject} in {fn}'
+
+    def robust_z(x):
+        return ((x - x.median()) / (1.4826 * (x - x.median()).abs().median())).clip(-3, 3)
+    cols = {'target_gain': 'target_z', 'distractor_gain': 'distractor_z', 'neutral_gain': 'neutral_z'}
+    for c, z in cols.items():
+        g[z] = g.groupby(['session', 'roi'])[c].transform(robust_z)
+    return g.groupby(['session', 'run', 'trial_nr'], as_index=False)[list(cols.values())].mean()
+
+
+def gain_events(ev, gains, off):
+    """Trial-wise decoded-gain modulators at the search display, centred within run (distractor: within value)."""
+    t = ev[ev.event_type == 'target'].drop_duplicates('trial_nr').merge(gains, on='trial_nr', how='left', validate='one_to_one')
+    t['present'] = t.distractor_present.isin([True, 'True'])
     rows = []
+    for name, col, keep in (('gain_target', 'target_z', t.target_z.notna()), ('gain_neutral', 'neutral_z', t.neutral_z.notna())):
+        x = t.loc[keep, col] - t.loc[keep, col].mean()
+        rows += [dict(onset=t.onset[i] - off, duration=1.75, trial_type=name, modulation=float(x[i])) for i in x.index]
+    for name, rank in (('gain_dist_high', 2), ('gain_dist_low', 0)):
+        keep = t.present & (t.value_rank == rank) & t.distractor_z.notna()
+        x = t.loc[keep, 'distractor_z'] - t.loc[keep, 'distractor_z'].mean()
+        rows += [dict(onset=t.onset[i] - off, duration=1.75, trial_type=name, modulation=float(x[i])) for i in x.index]
+    return rows
+
+
+def build_events_rpe(ev, n_removed, rt_control=False, gains=None):
+    off = n_removed * TR
+    rows = [] if gains is None else gain_events(ev, gains, off)
     if rt_control:      # RT and accuracy are logged from the phase after the response on, so read them at feedback
         beh = ev[ev.event_type == 'feedback'].drop_duplicates('trial_nr').set_index('trial_nr')
         ok = beh.correct.isin([True, 'True']) & pd.to_numeric(beh.rt, errors='coerce').notna()
@@ -159,6 +204,7 @@ def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deri
     sessions = sub.get_sessions()
     space_tag = f'space-{space}' + (f'_res-{res}' if res else '')
     imgs, evs, confs, start_times = [], [], [], []
+    trial_gains = load_trial_gains(bids_folder, subject) if design == 'rpe_rt_gain' else None
     for ses in sessions:
         runs = sub.get_runs(ses)
         for run, bold in zip(runs, sub.get_preprocessed_bold(ses, runs, fmriprep_deriv=fmriprep_deriv,
@@ -167,7 +213,10 @@ def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deri
             n_vols = image.load_img(str(bold)).shape[3]
             n_removed = len(raw[raw.event_type == 'pulse']) - n_vols
             ev = (build_events(raw, n_removed) if design == 'logreward'
-                  else build_events_rpe(raw, n_removed, rt_control=design == 'rpe_rt'))
+                  else build_events_rpe(raw, n_removed, rt_control=design in ('rpe_rt', 'rpe_rt_gain'),
+                                        gains=None if trial_gains is None else
+                                        trial_gains[(trial_gains.session == ses) & (trial_gains.run == run)]
+                                        .drop(columns=['session', 'run'])))
             imgs.append(str(bold))
             start_times.append(json.loads(Path(str(bold).replace('.nii.gz', '.json')).read_text()).get('StartTime', 0.))
             evs.append(ev)
@@ -185,12 +234,13 @@ def main(subject, bids_folder, space, res, smoothing_fwhm, n_jobs, fmriprep_deri
                                                         space=space, res=res))
     model.fit(imgs, events=evs, confounds=confs)
     deriv = {'logreward': 'nilearn_glm_reward', 'rpe': 'nilearn_glm_reward_rpe',
-             'rpe_rt': 'nilearn_glm_reward_rpe_rt'}[design]
+             'rpe_rt': 'nilearn_glm_reward_rpe_rt', 'rpe_rt_gain': 'nilearn_glm_reward_rpe_rt_gain'}[design]
     out = Path(bids_folder) / 'derivatives' / deriv / f'sub-{subject}' / 'func'
     out.mkdir(parents=True, exist_ok=True)
     from nilearn.glm.contrasts import expression_to_contrast_vector
     import re
-    for name, expr in {'logreward': CONTRASTS, 'rpe': CONTRASTS_RPE, 'rpe_rt': CONTRASTS_RPE_RT}[design].items():
+    for name, expr in {'logreward': CONTRASTS, 'rpe': CONTRASTS_RPE, 'rpe_rt': CONTRASTS_RPE_RT,
+                       'rpe_rt_gain': CONTRASTS_RPE_RT_GAIN}[design].items():
         # Per-run contrast vectors: a run that lacks one of the contrast's regressors (e.g. no uncued
         # low-reward feedback in that run) gets a null vector and is left out of the fixed-effects combination,
         # instead of failing the whole subject (KeyError) or biasing the contrast.
@@ -219,7 +269,7 @@ if __name__ == '__main__':
     ap.add_argument('--res', default='2')
     ap.add_argument('--smoothing-fwhm', type=float, default=6.)
     ap.add_argument('--n-jobs', type=int, default=8)
-    ap.add_argument('--design', choices=['logreward', 'rpe', 'rpe_rt'], default='logreward',
+    ap.add_argument('--design', choices=['logreward', 'rpe', 'rpe_rt', 'rpe_rt_gain'], default='logreward',
                     help="'rpe': reward relative to the cue's prediction -> nilearn_glm_reward_rpe; "
                          "'rpe_rt': the same with search RT and errors modelled -> nilearn_glm_reward_rpe_rt")
     a = ap.parse_args()

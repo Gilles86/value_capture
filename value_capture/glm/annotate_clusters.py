@@ -34,7 +34,14 @@ TITLES = {'outcome_logreward': 'Reward received, log(1 + points)', 'outcome_logr
           # rpe_rt design: search RT and errors modelled
           'rpe_cued': 'Reward beyond the cue, cued trials (speed only)',
           'rpe_uncued': 'Reward beyond the cue, uncued trials (unpredicted ×100 vs ×1)',
-          'search_rt': 'Search: slower vs faster correct responses'}
+          'search_rt': 'Search: slower vs faster correct responses',
+          # rpe_rt_gain design: trial-wise decoded V1-V3 gain, over and above value
+          'dist_gain': 'Decoded gain at the distractor, over and above value',
+          'dist_gain_high': 'Decoded gain at a high-value distractor',
+          'dist_gain_low': 'Decoded gain at a low-value distractor',
+          'dist_gain_value': 'Decoded distractor gain: high- vs low-value slope',
+          'target_gain': 'Decoded gain at the target',
+          'neutral_gain': 'Decoded gain at the neutral items'}
 ALPHA = -np.log10(.05)
 # Significant voxels only are coloured, so the map starts at |t| ≈ 3-4: saturated colours there, brighter (never
 # pale) towards the maximum. Positive: dark red → orange; negative: navy → blue.

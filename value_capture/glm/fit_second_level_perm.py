@@ -31,9 +31,12 @@ from scipy import stats
 CONTRASTS = ['outcome_logreward', 'outcome_logreward_cued', 'outcome_logreward_uncued', 'outcome_rpe', 'cue_value',
              'capture', 'feedback_vs_omit', 'omission_value']
 CONTRASTS_RPE = ['rpe', 'expected_reward', 'uncued_vs_cued', 'cue_value', 'feedback_vs_omit', 'omission_value']
+CONTRASTS_RPE_RT_GAIN = ['dist_gain', 'dist_gain_high', 'dist_gain_low', 'dist_gain_value', 'target_gain', 'neutral_gain',
+                         'cue_value']
 CONTRASTS_RPE_RT = ['rpe', 'rpe_cued', 'rpe_uncued', 'cue_value', 'expected_reward', 'omission_value', 'search_rt']
 DESIGNS = {'logreward': ('nilearn_glm_reward', 'CONTRASTS'), 'rpe': ('nilearn_glm_reward_rpe', 'CONTRASTS_RPE'),
-           'rpe_rt': ('nilearn_glm_reward_rpe_rt', 'CONTRASTS_RPE_RT')}
+           'rpe_rt': ('nilearn_glm_reward_rpe_rt', 'CONTRASTS_RPE_RT'),
+           'rpe_rt_gain': ('nilearn_glm_reward_rpe_rt_gain', 'CONTRASTS_RPE_RT_GAIN')}
 
 
 def contrasts_for(design):
