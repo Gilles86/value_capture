@@ -167,7 +167,9 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
         model = GaussianPRF2D(grid_coordinates=grid, paradigm=te_par, data=te_data, parameters=pars)
         for dec in decoders:
             t0 = time.time()
-            mask = (paradigm[~is_train] > 0) if dec == 'outline' else None
+            # 3-D mask (trials × rows × cols): the 2-D branch of StimulusFitter's mask check is broken (retsupp notes)
+            mask = ((paradigm[~is_train] > 0).reshape(-1, fp.GRID_RES, fp.GRID_RES)
+                    if dec == 'outline' else None)
             sf = StimulusFitter(model=model, data=te_data, omega=omega, parameters=pars, dof=dof)
             fit = sf.fit(l2_norm=l2_norm, learning_rate=learning_rate, max_n_iterations=max_iter,
                          min_n_iterations=min_iter, progressbar=False, mask=mask)
