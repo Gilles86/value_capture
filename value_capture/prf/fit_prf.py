@@ -339,33 +339,12 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
     prf_deriv += out_suffix
     if average_trials:
         prf_deriv += '_avg'
-    from keras import ops
-    from braincoder.utils.backend import softplus_inverse
-
-    class DoGPRF2D(DifferenceOfGaussiansPRF2D):
-        """braincoder's DoG inherits the Gaussian's 5-column transforms and drops srf_amplitude / srf_size
-        (shape error in GD). Same fix as retsupp's braincoder fork: srf_amplitude > 0, srf_size > 1."""
-
-        def _transform_parameters_forward(self, parameters):
-            return ops.concatenate([GaussianPRF2D._transform_parameters_forward(self, parameters[:, :5]),
-                                    ops.softplus(parameters[:, 5:6]), ops.softplus(parameters[:, 6:7]) + 1.],
-                                   axis=1)
-
-        def _transform_parameters_backward(self, parameters):
-            return ops.concatenate([GaussianPRF2D._transform_parameters_backward(self, parameters[:, :5]),
-                                    softplus_inverse(parameters[:, 5:6]), softplus_inverse(parameters[:, 6:7] - 1.)],
-                                   axis=1)
-
-    MODEL = {'gauss': GaussianPRF2D, 'dog': DoGPRF2D,
+    MODEL = {'gauss': GaussianPRF2D, 'dog': DifferenceOfGaussiansPRF2D,
              'dn': DivisiveNormalizationGaussianPRF2D}[model_kind]
+    model = MODEL(grid_coordinates=grid_coords)        # braincoder >= 0.7: models hold only their configuration
     fit_idx = np.arange(data_df.shape[1])
 
     if model_kind == 'gauss':
-        model = GaussianPRF2D(
-            data=data_df,
-            paradigm=paradigm_df,
-            grid_coordinates=grid_coords,
-        )
         par_fitter = ParameterFitter(model=model, data=data_df, paradigm=paradigm_df)
 
         # ── coarse grid search (correlation cost → amplitude/baseline-free) ───────
@@ -405,8 +384,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
         pars_ols = pars_ols.astype(np.float32).reset_index(drop=True)
         data_df = data_df.iloc[:, fit_idx]
         data_df.columns = range(len(fit_idx))
-        par_fitter = ParameterFitter(model=MODEL(data=data_df, paradigm=paradigm_df, grid_coordinates=grid_coords),
-                                     data=data_df, paradigm=paradigm_df)
+        par_fitter = ParameterFitter(model=model, data=data_df, paradigm=paradigm_df)
 
     # ── gradient descent (chunked to avoid GPU OOM) ───────────────────────────
     print(f'  Gradient descent ({gd_iterations} iterations, '
@@ -419,18 +397,13 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER,
         print(f'    chunk {i+1}/{len(chunks)}  voxels {start}–{end}')
         chunk_data = data_df.iloc[:, start:end]
         chunk_init = pars_ols.iloc[start:end]
-        chunk_model = MODEL(
-            data=chunk_data,
-            paradigm=paradigm_df,
-            grid_coordinates=grid_coords,
-        )
         chunk_fitter = ParameterFitter(
-            model=chunk_model, data=chunk_data, paradigm=paradigm_df)
+            model=model, data=chunk_data, paradigm=paradigm_df)
         pars_chunks.append(
             chunk_fitter.fit(init_pars=chunk_init, max_n_iterations=gd_iterations,
                              learning_rate=learning_rate))
         # free GPU memory between chunks
-        del chunk_model, chunk_fitter, chunk_data, chunk_init
+        del chunk_fitter, chunk_data, chunk_init
         try:
             import torch
             if torch.backends.mps.is_available():

@@ -63,7 +63,7 @@ def main(subjects, bids, deriv, out, r2_keep=.02):
 
         def predict(pars):
             p = pars.iloc[keep][PARS].reset_index(drop=True).astype(np.float32)
-            m = GaussianPRF2D(grid_coordinates=grid, paradigm=par_df, parameters=p)
+            m = GaussianPRF2D(grid_coordinates=grid)
             return np.asarray(m.predict(paradigm=par_df, parameters=p)).astype(np.float32)   # (n_images, n_vox)
 
         pred_st, pred_av = predict(st), predict(av)

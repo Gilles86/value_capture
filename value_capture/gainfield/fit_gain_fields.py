@@ -78,6 +78,7 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
     mask = fp._get_gm_mask(sub, sessions[0], bids, .1)
     Y = masking.apply_mask(sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv),
                            mask).astype(np.float32)
+    assert Y.shape[1] == len(pars_all), (Y.shape, len(pars_all))
     varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0]), mask))
     rows = []
     for roi in rois:

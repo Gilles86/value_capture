@@ -158,13 +158,12 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
             return pd.DataFrame(a, index=pd.Index(np.arange(len(a)), name='frame'))
 
         tr_data, tr_par = frame(Y[is_train][:, sel]), frame(paradigm[is_train])
-        te_data, te_par = frame(Y[~is_train][:, sel]), frame(paradigm[~is_train])
+        te_data = frame(Y[~is_train][:, sel])
         t0 = time.time()
-        model = GaussianPRF2D(grid_coordinates=grid, paradigm=tr_par, data=tr_data, parameters=pars)
+        model = GaussianPRF2D(grid_coordinates=grid)
         omega, dof = ResidualFitter(model=model, data=tr_data, paradigm=tr_par, parameters=pars).fit(
             max_n_iterations=resid_max_iter, progressbar=False, method='gauss')
         print(f'  noise model on {is_train.sum()} training trials: {time.time() - t0:.0f} s', flush=True)
-        model = GaussianPRF2D(grid_coordinates=grid, paradigm=te_par, data=te_data, parameters=pars)
         for dec in decoders:
             t0 = time.time()
             # 3-D mask (trials × rows × cols): the 2-D branch of StimulusFitter's mask check is broken (retsupp notes)
@@ -196,7 +195,7 @@ if __name__ == '__main__':
     ap.add_argument('--min-r2', type=float, default=.1, help='R² of the training-session PRF fit')
     ap.add_argument('--decoders', nargs='+', default=['outline', 'free'])
     ap.add_argument('--l2-norm', type=float, default=1.0)
-    ap.add_argument('--learning-rate', type=float, default=.5)
+    ap.add_argument('--learning-rate', type=float, default=.05)
     ap.add_argument('--max-iter', type=int, default=1000)
     ap.add_argument('--min-iter', type=int, default=200)
     ap.add_argument('--glmsingle-deriv', default='glmsingle_fbreg')

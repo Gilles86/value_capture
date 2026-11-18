@@ -75,11 +75,7 @@ def run_subject(subject, bids_folder, glmsingle_deriv, prf_deriv, r2_min, out_di
     paradigm_df  = pd.DataFrame(paradigm_arr)
     paradigm_df.index.name = 'frame'
 
-    model = GaussianPRF2D(
-        data=data_df,
-        paradigm=paradigm_df,
-        grid_coordinates=grid_coords,
-    )
+    model = GaussianPRF2D(grid_coordinates=grid_coords)
 
     print('  Computing predictions...')
     predictions_df = model.predict(paradigm=paradigm_df, parameters=pars_model)
