@@ -12,6 +12,10 @@ PRFs as fixed_pars). Gains at 0 = the PRF model.
 Cross-validation by session (--cross-session): the gain fields of session s sit on the PRFs fitted on the other
 session (``<prf-deriv>_train-ses<other>``), as in decode/decode_trials.py. Use the PRFs fitted on the same betas.
 
+Free PRFs (--free-prf): the PRF parameters are fitted together with the gain fields on the same betas (started from
+the PRF fit), and the PRF-only comparison model is refitted on those betas too (gains at 0). Without it the PRFs stay
+fixed at the PRF fit, which may come from other betas.
+
 Points display (--points): the feedback display comes 2.5-4 s after the search display and leaks into its betas even
 when GLMsingle models it. 'subtract' removes each voxel's points response, estimated on the no-distractor trials only
 (decode/aggregate_decoded.remove_points: there the multiplier is random and nothing else depends on it); 'exclude'
@@ -75,7 +79,7 @@ def r2(y, yhat):
 
 
 def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out, prf_model='gauss',
-         cross_session=False, points='keep'):
+         cross_session=False, points='keep', free_prf=False):
     from braincoder.models import GainFieldDoGPRF2D, GainFieldPRF2D
     from braincoder.optimize import ParameterFitter
 
@@ -131,17 +135,21 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
             init = model.add_field_parameters(prf, field_sigma=1.5)
 
             def fit(d, p, init_pars, fixed):
+                shared = [l for l in model.field_parameter_labels(include_tied=False) if l not in fixed]
                 fitter = ParameterFitter(model=model, data=d, paradigm=p)
-                est = fitter.fit(init_pars=init_pars, fixed_pars=fixed,
-                                 shared_pars=[l for l in model.field_parameter_labels(include_tied=False)
-                                              if l not in fixed],
+                est = fitter.fit(init_pars=init_pars, fixed_pars=fixed or None, shared_pars=shared or None,
                                  max_n_iterations=n_iter, learning_rate=lr, progressbar=False)
                 return est, fitter
 
-            est, fitter = fit(data, paradigm, init, model.prf_parameter_labels())
+            if free_prf:
+                est, _ = fit(data, paradigm, init, [])
+                base, _ = fit(data, paradigm, init, model.field_parameter_labels(include_tied=False))
+            else:
+                est, _ = fit(data, paradigm, init, model.prf_parameter_labels())
+                base = init
             pred = model.predict(paradigm=paradigm, parameters=est)
-            pred0 = model.predict(paradigm=paradigm, parameters=init)
-            row = dict(subject=subject, roi=roi, scope=scope, points=points, n_voxels=len(sel), n_trials=len(data),
+            pred0 = model.predict(paradigm=paradigm, parameters=base)
+            row = dict(subject=subject, roi=roi, scope=scope, points=points, free_prf=free_prf, n_voxels=len(sel), n_trials=len(data),
                        r2_prf=float(np.median(r2(data, pred0))), r2_gain=float(np.median(r2(data, pred))))
             row.update({l: float(est[l].iloc[0]) for l in model.field_parameter_labels()})
             rows.append(row)
@@ -180,6 +188,7 @@ if __name__ == '__main__':
     ap.add_argument('--cross-session', action='store_true',
                     help='gain fields of each session on the PRFs of <prf-deriv>_train-ses<other>')
     ap.add_argument('--points', choices=['keep', 'subtract', 'exclude'], default='keep')
+    ap.add_argument('--free-prf', action='store_true', help='fit the PRFs together with the gain fields')
     ap.add_argument('--tag', default='', help='suffix of the output folder, e.g. fbevents_subtract')
     a = ap.parse_args()
     folder = 'gain_fields' if a.prf_model == 'gauss' else f'gain_fields_{a.prf_model}'
@@ -187,4 +196,5 @@ if __name__ == '__main__':
     out = a.out or (f'/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/{folder}/'
                     f'sub-{a.subject}_gain_fields.tsv')
     main(a.subject, a.rois, a.bids_folder, a.prf_deriv, a.glmsingle_deriv, a.min_r2, a.per_run, a.n_iter,
-         a.learning_rate, out, prf_model=a.prf_model, cross_session=a.cross_session, points=a.points)
+         a.learning_rate, out, prf_model=a.prf_model, cross_session=a.cross_session, points=a.points,
+         free_prf=a.free_prf)
