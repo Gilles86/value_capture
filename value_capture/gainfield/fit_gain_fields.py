@@ -16,6 +16,10 @@ Free PRFs (--free-prf): the PRF parameters are fitted together with the gain fie
 the PRF fit), and the PRF-only comparison model is refitted on those betas too (gains at 0). Without it the PRFs stay
 fixed at the PRF fit, which may come from other betas.
 
+Colour (--split-colour): four distractor gains, colour x value (distractor_<green|orange>_<low|high>). Colour and
+value are counterbalanced across sessions (CLAUDE.md), so a colour effect over and above value is identified within
+each subject.
+
 Points display (--points): the feedback display comes 2.5-4 s after the search display and leaks into its betas even
 when GLMsingle models it. 'subtract' removes each voxel's points response, estimated on the no-distractor trials only
 (decode/aggregate_decoded.remove_points: there the multiplier is random and nothing else depends on it); 'exclude'
@@ -42,6 +46,8 @@ from value_capture.utils.data import Subject  # noqa: E402
 
 ROIS = {'V1': (1,), 'V2': (2,), 'V3': (3,), 'hV4': (4,), 'LO': (7, 8), 'V3AB': (11, 12)}
 GAIN_LABELS = ['target', 'distractor_low', 'distractor_high']
+COLOUR_GAIN_LABELS = ['target'] + [f'distractor_{c}_{v}' for c in ('green', 'orange') for v in ('low', 'high')]
+HIGH_COLOUR = {0: 'orange', 1: 'green'}          # value_condition -> colour of the high-value (rank 2) distractor
 
 
 def trial_table(sub, sessions, glmsingle_deriv):
@@ -54,7 +60,8 @@ def trial_table(sub, sessions, glmsingle_deriv):
         raw.drop_duplicates(['session', 'run', 'trial_nr']), on=['session', 'run', 'trial_nr'], how='left',
         validate='one_to_one')
     trials['distractor_present'] = trials.distractor_present.isin([True, 'True'])
-    shown = sub.get_behavioral_data(exclude_outlier_rts=False).reset_index()[['session', 'run', 'trial_nr', 'show_feedback']]
+    shown = sub.get_behavioral_data(exclude_outlier_rts=False).reset_index()[['session', 'run', 'trial_nr', 'show_feedback',
+                                                                           'value_condition']]
     shown[['session', 'run']] = shown[['session', 'run']].astype(int)
     trials[['session', 'run']] = trials[['session', 'run']].astype(int)
     trials = trials.merge(shown.astype({'show_feedback': bool}), on=['session', 'run', 'trial_nr'], how='left',
@@ -63,12 +70,19 @@ def trial_table(sub, sessions, glmsingle_deriv):
     return trials
 
 
-def assignments(trials):
+def distractor_colour(t):
+    high = HIGH_COLOUR[int(t.value_condition)]
+    return high if t.value_rank == 2 else {'orange': 'green', 'green': 'orange'}[high]
+
+
+def assignments(trials, split_colour=False):
     out = []
     for _, t in trials.iterrows():
         a = {'target': int(t.target_location)}
         if t.distractor_present:
-            a['distractor_high' if t.value_rank == 2 else 'distractor_low'] = int(t.distractor_location)
+            value = 'high' if t.value_rank == 2 else 'low'
+            label = f'distractor_{distractor_colour(t)}_{value}' if split_colour else f'distractor_{value}'
+            a[label] = int(t.distractor_location)
         out.append(a)
     return out
 
@@ -79,7 +93,7 @@ def r2(y, yhat):
 
 
 def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out, prf_model='gauss',
-         cross_session=False, points='keep', free_prf=False):
+         cross_session=False, points='keep', free_prf=False, split_colour=False):
     from braincoder.models import GainFieldDoGPRF2D, GainFieldPRF2D
     from braincoder.optimize import ParameterFitter
 
@@ -91,9 +105,10 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
     images = fp.build_paradigm(trials, 'bar_items')                       # (trials, pixels)
     grid = fp.make_grid_coordinates()
     model_class = {'gauss': GainFieldPRF2D, 'dog': GainFieldDoGPRF2D}[prf_model]
-    model = model_class(grid_coordinates=grid, field_positions=fp.ITEM_XY, gain_labels=GAIN_LABELS)
+    gain_labels = COLOUR_GAIN_LABELS if split_colour else GAIN_LABELS
+    model = model_class(grid_coordinates=grid, field_positions=fp.ITEM_XY, gain_labels=gain_labels)
     prf_labels = model.prf_parameter_labels()
-    paradigm_all = model.make_paradigm(images, assignments(trials))
+    paradigm_all = model.make_paradigm(images, assignments(trials, split_colour))
 
     def read_prf(deriv):
         return pd.read_csv(Path(bids) / 'derivatives' / deriv / f'sub-{subject}' / 'ses-all' / 'func' /
@@ -154,7 +169,7 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
             row.update({l: float(est[l].iloc[0]) for l in model.field_parameter_labels()})
             rows.append(row)
             print(f"{scope} {roi}: {len(sel)} voxels, {len(data)} trials, sigma={row['field_sigma']:.2f}, "
-                  + ', '.join(f"{k}={row['field_gain_' + k]:+.3f}" for k in GAIN_LABELS), flush=True)
+                  + ', '.join(f"{k}={row['field_gain_' + k]:+.3f}" for k in gain_labels), flush=True)
             if per_run:
                 fixed = model.prf_parameter_labels() + ['field_sigma']
                 for (s, r), ridx in tr.groupby(['session', 'run']).groups.items():
@@ -189,6 +204,7 @@ if __name__ == '__main__':
                     help='gain fields of each session on the PRFs of <prf-deriv>_train-ses<other>')
     ap.add_argument('--points', choices=['keep', 'subtract', 'exclude'], default='keep')
     ap.add_argument('--free-prf', action='store_true', help='fit the PRFs together with the gain fields')
+    ap.add_argument('--split-colour', action='store_true', help='distractor gains per colour x value')
     ap.add_argument('--tag', default='', help='suffix of the output folder, e.g. fbevents_subtract')
     a = ap.parse_args()
     folder = 'gain_fields' if a.prf_model == 'gauss' else f'gain_fields_{a.prf_model}'
@@ -197,4 +213,4 @@ if __name__ == '__main__':
                     f'sub-{a.subject}_gain_fields.tsv')
     main(a.subject, a.rois, a.bids_folder, a.prf_deriv, a.glmsingle_deriv, a.min_r2, a.per_run, a.n_iter,
          a.learning_rate, out, prf_model=a.prf_model, cross_session=a.cross_session, points=a.points,
-         free_prf=a.free_prf)
+         free_prf=a.free_prf, split_colour=a.split_colour)
