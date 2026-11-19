@@ -9,6 +9,15 @@ with Gaussian fields A_l at the 8 item locations and gain types k = target, dist
 the PRF fit) pools the modulated image. Shared per subject x ROI: sigma and the 3 gains (ParameterFitter shared_pars,
 PRFs as fixed_pars). Gains at 0 = the PRF model.
 
+Cross-validation by session (--cross-session): the gain fields of session s sit on the PRFs fitted on the other
+session (``<prf-deriv>_train-ses<other>``), as in decode/decode_trials.py. Use the PRFs fitted on the same betas.
+
+Points display (--points): the feedback display comes 2.5-4 s after the search display and leaks into its betas even
+when GLMsingle models it. 'subtract' removes each voxel's points response, estimated on the no-distractor trials only
+(decode/aggregate_decoded.remove_points: there the multiplier is random and nothing else depends on it); 'exclude'
+keeps only trials without points. A points term fitted on all trials would also absorb a value effect, since the
+multiplier follows the distractor's value.
+
 Outputs (one row per subject x ROI x scope): scope 'all' = all trials; scope 'run-<s>-<r>' = gains refitted per run
 with sigma fixed at the 'all' estimate (learning curves, for bauer). Plus R² of the gain model vs the PRF model.
 
@@ -41,6 +50,12 @@ def trial_table(sub, sessions, glmsingle_deriv):
         raw.drop_duplicates(['session', 'run', 'trial_nr']), on=['session', 'run', 'trial_nr'], how='left',
         validate='one_to_one')
     trials['distractor_present'] = trials.distractor_present.isin([True, 'True'])
+    shown = sub.get_behavioral_data(exclude_outlier_rts=False).reset_index()[['session', 'run', 'trial_nr', 'show_feedback']]
+    shown[['session', 'run']] = shown[['session', 'run']].astype(int)
+    trials[['session', 'run']] = trials[['session', 'run']].astype(int)
+    trials = trials.merge(shown.astype({'show_feedback': bool}), on=['session', 'run', 'trial_nr'], how='left',
+                          validate='one_to_one')
+    assert trials.show_feedback.notna().all()
     return trials
 
 
@@ -59,9 +74,12 @@ def r2(y, yhat):
     return 1 - ((y - yhat) ** 2).sum(0) / ((y - y.mean(0)) ** 2).sum(0)
 
 
-def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out, prf_model='gauss'):
+def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out, prf_model='gauss',
+         cross_session=False, points='keep'):
     from braincoder.models import GainFieldDoGPRF2D, GainFieldPRF2D
     from braincoder.optimize import ParameterFitter
+
+    from value_capture.decode.aggregate_decoded import remove_points
 
     sub = Subject(subject, bids_folder=bids)
     sessions = sub.get_sessions()
@@ -71,57 +89,73 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
     model_class = {'gauss': GainFieldPRF2D, 'dog': GainFieldDoGPRF2D}[prf_model]
     model = model_class(grid_coordinates=grid, field_positions=fp.ITEM_XY, gain_labels=GAIN_LABELS)
     prf_labels = model.prf_parameter_labels()
-    paradigm = model.make_paradigm(images, assignments(trials))
+    paradigm_all = model.make_paradigm(images, assignments(trials))
 
     def read_prf(deriv):
         return pd.read_csv(Path(bids) / 'derivatives' / deriv / f'sub-{subject}' / 'ses-all' / 'func' /
                            f'sub-{subject}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv',
                            sep='\t', index_col=0)
-    pars_all = read_prf(prf_deriv)            # voxels are selected on the Gaussian fit, for every PRF model
-    pars_model = pars_all if prf_model == 'gauss' else read_prf(f'{prf_deriv}_{prf_model}')
-    assert len(pars_model) == len(pars_all)
     mask = fp._get_gm_mask(sub, sessions[0], bids, .1)
-    Y = masking.apply_mask(sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv),
-                           mask).astype(np.float32)
-    assert Y.shape[1] == len(pars_all), (Y.shape, len(pars_all))
+    Y_all = masking.apply_mask(sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv),
+                               mask).astype(np.float32)
     varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0]), mask))
+
+    # folds: (label, trial indices, PRF derivative)
+    if cross_session:
+        assert len(sessions) == 2, sessions
+        folds = [(f'ses-{s}', np.flatnonzero(trials.session.astype(int).to_numpy() == int(s)),
+                  f'{prf_deriv}_train-ses{o}') for s, o in zip(sessions, sessions[::-1])]
+    else:
+        folds = [('all', np.arange(len(trials)), prf_deriv)]
+
     rows = []
-    for roi in rois:
-        sel = np.flatnonzero(np.isin(varea, ROIS[roi]) & (pars_all.r2.to_numpy() >= min_r2)
-                             & np.isfinite(pars_model[prf_labels].to_numpy()).all(1))
-        if len(sel) < 10:
-            print(f'{roi}: {len(sel)} voxels, skipped', flush=True)
-            continue
-        prf = pars_model.iloc[sel][prf_labels].reset_index(drop=True).astype(np.float32)
-        data = pd.DataFrame(Y[:, sel], index=paradigm.index)
-        init = model.add_field_parameters(prf, field_sigma=1.5)
+    for scope, idx, deriv in folds:
+        pars_all = read_prf(deriv)            # voxels are selected on the Gaussian fit, for every PRF model
+        pars_model = pars_all if prf_model == 'gauss' else read_prf(f'{deriv}_{prf_model}')
+        assert len(pars_model) == len(pars_all) == Y_all.shape[1], (len(pars_model), len(pars_all), Y_all.shape)
+        tr = trials.iloc[idx].reset_index(drop=True)
+        Y = Y_all[idx]
+        shown = tr.show_feedback.to_numpy(bool)
+        if points == 'subtract':
+            Y = remove_points(tr, Y, shown)
+        keep = ~shown if points == 'exclude' else np.ones(len(tr), bool)
+        tr, Y, paradigm = tr[keep].reset_index(drop=True), Y[keep], paradigm_all.iloc[idx[keep]]
+        for roi in rois:
+            sel = np.flatnonzero(np.isin(varea, ROIS[roi]) & (pars_all.r2.to_numpy() >= min_r2)
+                                 & np.isfinite(pars_model[prf_labels].to_numpy()).all(1))
+            if len(sel) < 10:
+                print(f'{scope} {roi}: {len(sel)} voxels, skipped', flush=True)
+                continue
+            prf = pars_model.iloc[sel][prf_labels].reset_index(drop=True).astype(np.float32)
+            data = pd.DataFrame(Y[:, sel], index=paradigm.index)
+            init = model.add_field_parameters(prf, field_sigma=1.5)
 
-        def fit(d, p, init_pars, fixed):
-            fitter = ParameterFitter(model=model, data=d, paradigm=p)
-            est = fitter.fit(init_pars=init_pars, fixed_pars=fixed,
-                             shared_pars=[l for l in model.field_parameter_labels(include_tied=False)
-                                          if l not in fixed],
-                             max_n_iterations=n_iter, learning_rate=lr, progressbar=False)
-            return est, fitter
+            def fit(d, p, init_pars, fixed):
+                fitter = ParameterFitter(model=model, data=d, paradigm=p)
+                est = fitter.fit(init_pars=init_pars, fixed_pars=fixed,
+                                 shared_pars=[l for l in model.field_parameter_labels(include_tied=False)
+                                              if l not in fixed],
+                                 max_n_iterations=n_iter, learning_rate=lr, progressbar=False)
+                return est, fitter
 
-        est, fitter = fit(data, paradigm, init, model.prf_parameter_labels())
-        pred = model.predict(paradigm=paradigm, parameters=est)
-        pred0 = model.predict(paradigm=paradigm, parameters=init)
-        row = dict(subject=subject, roi=roi, scope='all', n_voxels=len(sel), n_trials=len(data),
-                   r2_prf=float(np.median(r2(data, pred0))), r2_gain=float(np.median(r2(data, pred))))
-        row.update({l: float(est[l].iloc[0]) for l in model.field_parameter_labels()})
-        rows.append(row)
-        print(f"{roi}: {len(sel)} voxels, sigma={row['field_sigma']:.2f}, "
-              + ', '.join(f"{k}={row['field_gain_' + k]:+.3f}" for k in GAIN_LABELS), flush=True)
-        if per_run:
-            fixed = model.prf_parameter_labels() + ['field_sigma']
-            for (s, r), idx in trials.groupby(['session', 'run']).groups.items():
-                idx = np.asarray(sorted(idx))
-                e, _ = fit(data.iloc[idx], paradigm.iloc[idx], est, fixed)
-                rr = dict(subject=subject, roi=roi, scope=f'run-{s}-{r}', session=s, run=r, n_voxels=len(sel),
-                          n_trials=len(idx))
-                rr.update({l: float(e[l].iloc[0]) for l in model.field_parameter_labels()})
-                rows.append(rr)
+            est, fitter = fit(data, paradigm, init, model.prf_parameter_labels())
+            pred = model.predict(paradigm=paradigm, parameters=est)
+            pred0 = model.predict(paradigm=paradigm, parameters=init)
+            row = dict(subject=subject, roi=roi, scope=scope, points=points, n_voxels=len(sel), n_trials=len(data),
+                       r2_prf=float(np.median(r2(data, pred0))), r2_gain=float(np.median(r2(data, pred))))
+            row.update({l: float(est[l].iloc[0]) for l in model.field_parameter_labels()})
+            rows.append(row)
+            print(f"{scope} {roi}: {len(sel)} voxels, {len(data)} trials, sigma={row['field_sigma']:.2f}, "
+                  + ', '.join(f"{k}={row['field_gain_' + k]:+.3f}" for k in GAIN_LABELS), flush=True)
+            if per_run:
+                fixed = model.prf_parameter_labels() + ['field_sigma']
+                for (s, r), ridx in tr.groupby(['session', 'run']).groups.items():
+                    ridx = np.asarray(sorted(ridx))
+                    e, _ = fit(data.iloc[ridx], paradigm.iloc[ridx], est, fixed)
+                    rr = dict(subject=subject, roi=roi, scope=f'run-{s}-{r}', session=s, run=r, points=points,
+                              n_voxels=len(sel), n_trials=len(ridx))
+                    rr.update({l: float(e[l].iloc[0]) for l in model.field_parameter_labels()})
+                    rows.append(rr)
     t = pd.DataFrame(rows)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -143,9 +177,14 @@ if __name__ == '__main__':
     ap.add_argument('--out', default=None)
     ap.add_argument('--prf-model', choices=['gauss', 'dog'], default='gauss',
                     help='PRF under the gain field; dog reads <prf-deriv>_dog and writes to gain_fields_dog')
+    ap.add_argument('--cross-session', action='store_true',
+                    help='gain fields of each session on the PRFs of <prf-deriv>_train-ses<other>')
+    ap.add_argument('--points', choices=['keep', 'subtract', 'exclude'], default='keep')
+    ap.add_argument('--tag', default='', help='suffix of the output folder, e.g. fbevents_subtract')
     a = ap.parse_args()
     folder = 'gain_fields' if a.prf_model == 'gauss' else f'gain_fields_{a.prf_model}'
+    folder += f'_{a.tag}' if a.tag else ''
     out = a.out or (f'/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/{folder}/'
                     f'sub-{a.subject}_gain_fields.tsv')
     main(a.subject, a.rois, a.bids_folder, a.prf_deriv, a.glmsingle_deriv, a.min_r2, a.per_run, a.n_iter,
-         a.learning_rate, out, prf_model=a.prf_model)
+         a.learning_rate, out, prf_model=a.prf_model, cross_session=a.cross_session, points=a.points)
