@@ -177,7 +177,7 @@ def add_gains(df, gains, rois):
 
 
 def main(model, draws, tune, post_only=False, practice=False, gains=None, gain_rois=None, gain_label='early',
-         neural_file=None):
+         neural_file=None, neural_tag=''):
     import arviz as az
     import pymc as pm
     import xarray as xr
@@ -189,7 +189,8 @@ def main(model, draws, tune, post_only=False, practice=False, gains=None, gain_r
         df = df.assign(subject=df.subject.astype(str).str.zfill(2))
         df['neural_value'] = df.subject.map(n)
         assert df.neural_value.notna().all(), 'a subject has no neural value effect'
-    tag = model + ('_wpractice' if practice else '') + (f'_{gain_label}' if model in ('neural', 'value_neural') else '')
+    tag = (model + ('_wpractice' if practice else '') + (f'_{gain_label}' if model in ('neural', 'value_neural') else '')
+           + (f'_{neural_tag}' if neural_tag else ''))
     print(f'{len(df)} trials ({int(df.practice.sum())} practice), {int((~df.responded).sum())} no response')
     m, t0_max = build(df, model)
     out_nc = ROOT / f'notes/data/race_{tag}.nc'
@@ -237,7 +238,7 @@ def main(model, draws, tune, post_only=False, practice=False, gains=None, gain_r
             rows.append(dict(measure=gain_label, term=nm, mean=d.mean(), hdi_lo=h[0], hdi_hi=h[1], p_lt_0=(d < 0).mean(),
                              pct_drift=100 * (np.exp(d.mean()) - 1), n_subjects=df.subj_idx.nunique()))
         res = pd.DataFrame(rows)
-        res.to_csv(ROOT / f'notes/data/decoded_gain/race_value_neural_{gain_label}.tsv', sep='\t', index=False)
+        res.to_csv(ROOT / f'notes/data/decoded_gain/race_{tag}.tsv', sep='\t', index=False)
         print(res.round(4).to_string(index=False))
     if model in ('minimal', 'neural'):
         for nm in ('beta_dist_mu', 'beta_value', 'beta_session') + (('beta_practice',) if practice else ()):
@@ -276,5 +277,7 @@ if __name__ == '__main__':
     ap.add_argument('--gain-rois', nargs='+', default=['V1', 'V2', 'V3'])
     ap.add_argument('--gain-label', default='early', help='neural: name of the areas; value_neural: column of --neural-file')
     ap.add_argument('--neural-file', default=str(ROOT / 'notes/data/decoded_gain/subject_value_effects_dog_regress.tsv'))
+    ap.add_argument('--neural-tag', default='', help='appended to the output names (which neural pipeline)')
     a = ap.parse_args()
-    main(a.model, a.draws, a.tune, a.post_only, a.practice, a.gains, a.gain_rois, a.gain_label, a.neural_file)
+    main(a.model, a.draws, a.tune, a.post_only, a.practice, a.gains, a.gain_rois, a.gain_label, a.neural_file,
+         a.neural_tag)
