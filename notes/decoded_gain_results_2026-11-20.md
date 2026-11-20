@@ -33,6 +33,19 @@ more so for a high-value distractor? And does that link to behaviour or to stria
    high - low is positive with points subtracted (Gaussian +0.26 p = .029, DoG +0.29 p = .038) but not with
    points trials excluded (+0.03 p = .84, +0.09 p = .45): most likely residual points (hV4/LO cover the fovea).
    R² gain over PRF only <= .005.
+5b. **Points leak scales with the delay.** Foveal V1-V3 search betas (fbevents) on points trials, minus no-points
+   trials at the same bar position, grow with the HRF overlap of the points and search events (slope > 0 in
+   12/12 subjects, p = .0005) and with the number of characters (+0.155 per character, p = .001). High-value
+   points have 2-4 characters, low-value always 2. `gainfield/check_points_leak.py`,
+   `notes/data/points_leak_isi.tsv`.
+5c. **Points as part of the stimulus (`--points model`, all trials).** The rendered points text, scaled by its
+   HRF overlap with the search event (`gainfield/points.py`), is a foveal image layer with one fitted weight per
+   voxel, not modulated by the gain fields. Ventral high - low: Gaussian +0.10 p = .59, DoG +0.28 p = .073.
+   Early/V2 high - low: Gaussian -0.04 p = .013 / -0.05 p = .022 (negative, 1/12 and 3/12 positive), DoG
+   +0.02 p = .92 / -0.02 p = .54. Gaussian and DoG disagree, so no value effect survives consistently.
+5d. **Peripheral voxels only (PRF eccentricity >= 2 deg).** Early target gain is clearer (p = .005-.024 in all
+   four fits); early high - low p = .067-.96; ventral (only 6 subjects with >= 10 voxels) high - low -0.21 to
+   +0.03, all p >= .4.
 6. **Colour (pilot, V1-V3, Gaussian, points subtracted):** green - orange -0.003 p = .87; colour x value p >= .10.
 7. **Learning (per-run gains, sigma and PRFs fixed):** no change of the value gain over runs, early vs late
    within a session, or between sessions (all p > .06, mostly > .2).
@@ -55,6 +68,6 @@ fitted on other betas.
 ## Open
 
 - A main figure on the primary pipeline (fbevents, matched PRFs, points subtracted / excluded).
-- Ventral value effect with points subtracted vs excluded: a better points model for foveal areas, or a ventral
-  analysis restricted to peripheral voxels (eccentricity > 2 deg).
+- Ventral value effect: gone with points excluded, with peripheral voxels only and with the Gaussian points
+  model; a trend remains with the DoG points model (p = .073). Treat as unresolved, most likely points.
 - Ladder model comparison for the gain fields (plan in `gain_field_plan_2026-11-17.md`), cross-validated.
