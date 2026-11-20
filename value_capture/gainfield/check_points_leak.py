@@ -18,21 +18,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from nilearn import masking
-from nilearn.glm.first_level import compute_regressor
 
+from value_capture.gainfield.points import overlap
 from value_capture.prf import fit_prf as fp
 from value_capture.utils.data import Subject
-
-SEARCH_DUR, POINTS_DUR = 1.75, 1.0
-
-
-def overlap(delay, dt=.05):
-    """Regression weight of a points regressor (onset ``delay`` after search onset) on the search regressor."""
-    t = np.arange(0, 40, dt)
-    s = compute_regressor([[0.], [SEARCH_DUR], [1.]], 'spm', t)[0][:, 0]
-    p = compute_regressor([[delay], [POINTS_DUR], [1.]], 'spm', t)[0][:, 0]
-    return float(s @ p / (s @ s))
-
 
 def subject_rows(subject, bids, glmsingle_deriv, prf_deriv, max_ecc):
     sub = Subject(subject, bids_folder=bids)

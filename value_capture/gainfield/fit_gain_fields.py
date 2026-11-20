@@ -23,7 +23,10 @@ each subject.
 Points display (--points): the feedback display comes 2.5-4 s after the search display and leaks into its betas even
 when GLMsingle models it. 'subtract' removes each voxel's points response, estimated on the no-distractor trials only
 (decode/aggregate_decoded.remove_points: there the multiplier is random and nothing else depends on it); 'exclude'
-keeps only trials without points. A points term fitted on all trials would also absorb a value effect, since the
+keeps only trials without points; 'model' puts the points display into the stimulus (gainfield/points.py): each
+trial's rendered points string, scaled by the overlap of its HRF-convolved event with the search event (a function of
+the delay between them), in an extra foveal pixel layer on the same coordinates. One shared weight (``points_weight``,
+an image scale) is fitted; the PRFs decide where it lands; the gain fields do not modulate that layer. A points term fitted on all trials would also absorb a value effect, since the
 multiplier follows the distractor's value.
 
 Outputs (one row per subject x ROI x scope): scope 'all' = all trials; scope 'run-<s>-<r>' = gains refitted per run
@@ -106,7 +109,23 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
     grid = fp.make_grid_coordinates()
     model_class = {'gauss': GainFieldPRF2D, 'dog': GainFieldDoGPRF2D}[prf_model]
     gain_labels = COLOUR_GAIN_LABELS if split_colour else GAIN_LABELS
-    model = model_class(grid_coordinates=grid, field_positions=fp.ITEM_XY, gain_labels=gain_labels)
+    extra = {}
+    if points == 'model':
+        from keras import ops
+        from value_capture.gainfield import points as pts
+        trials = pts.add_points_info(sub, trials)
+        patch = pts.patch_coordinates(grid)
+        images = np.hstack([images, pts.points_images(trials, patch)])
+        layer = np.r_[np.zeros(len(grid)), np.ones(len(patch))].astype(np.float32)
+        grid = pd.concat([grid, patch], ignore_index=True)
+
+        def combine(imgs, field_sums):                    # fields modulate the display, not the points layer
+            m = ops.maximum(1.0 + sum(field_sums), 0.0)
+            keep = ops.convert_to_tensor(layer)[None, None, :]
+            return imgs * (m * (1.0 - keep) + keep)
+        extra = dict(image_scales={'points_weight': layer}, combination=combine)
+        print(f'points layer: {len(patch)} pixels, {int(trials.show_feedback.sum())} trials with points', flush=True)
+    model = model_class(grid_coordinates=grid, field_positions=fp.ITEM_XY, gain_labels=gain_labels, **extra)
     prf_labels = model.prf_parameter_labels()
     paradigm_all = model.make_paradigm(images, assignments(trials, split_colour))
 
@@ -157,9 +176,10 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
                                  max_n_iterations=n_iter, learning_rate=lr, progressbar=False)
                 return est, fitter
 
+            gain_pars = [l for l in model.field_parameter_labels(include_tied=False) if l != 'points_weight']
             if free_prf:
                 est, _ = fit(data, paradigm, init, [])
-                base, _ = fit(data, paradigm, init, model.field_parameter_labels(include_tied=False))
+                base, _ = fit(data, paradigm, init, gain_pars)
             else:
                 est, _ = fit(data, paradigm, init, model.prf_parameter_labels())
                 base = init
@@ -172,7 +192,7 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
             print(f"{scope} {roi}: {len(sel)} voxels, {len(data)} trials, sigma={row['field_sigma']:.2f}, "
                   + ', '.join(f"{k}={row['field_gain_' + k]:+.3f}" for k in gain_labels), flush=True)
             if per_run:
-                fixed = model.prf_parameter_labels() + ['field_sigma']
+                fixed = model.prf_parameter_labels() + ['field_sigma'] + (['points_weight'] if points == 'model' else [])
                 for (s, r), ridx in tr.groupby(['session', 'run']).groups.items():
                     ridx = np.asarray(sorted(ridx))
                     e, _ = fit(data.iloc[ridx], paradigm.iloc[ridx], est, fixed)
@@ -203,7 +223,7 @@ if __name__ == '__main__':
                     help='PRF under the gain field; dog reads <prf-deriv>_dog and writes to gain_fields_dog')
     ap.add_argument('--cross-session', action='store_true',
                     help='gain fields of each session on the PRFs of <prf-deriv>_train-ses<other>')
-    ap.add_argument('--points', choices=['keep', 'subtract', 'exclude'], default='keep')
+    ap.add_argument('--points', choices=['keep', 'subtract', 'exclude', 'model'], default='keep')
     ap.add_argument('--free-prf', action='store_true', help='fit the PRFs together with the gain fields')
     ap.add_argument('--split-colour', action='store_true', help='distractor gains per colour x value')
     ap.add_argument('--min-ecc', type=float, default=0., help='only voxels with PRF eccentricity >= this (deg)')
