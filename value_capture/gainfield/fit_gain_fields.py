@@ -93,7 +93,7 @@ def r2(y, yhat):
 
 
 def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out, prf_model='gauss',
-         cross_session=False, points='keep', free_prf=False, split_colour=False):
+         cross_session=False, points='keep', free_prf=False, split_colour=False, min_ecc=0.):
     from braincoder.models import GainFieldDoGPRF2D, GainFieldPRF2D
     from braincoder.optimize import ParameterFitter
 
@@ -140,7 +140,8 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
         keep = ~shown if points == 'exclude' else np.ones(len(tr), bool)
         tr, Y, paradigm = tr[keep].reset_index(drop=True), Y[keep], paradigm_all.iloc[idx[keep]]
         for roi in rois:
-            sel = np.flatnonzero(np.isin(varea, ROIS[roi]) & (pars_all.r2.to_numpy() >= min_r2)
+            ecc = np.hypot(pars_all.x.to_numpy(), pars_all.y.to_numpy())
+            sel = np.flatnonzero(np.isin(varea, ROIS[roi]) & (pars_all.r2.to_numpy() >= min_r2) & (ecc >= min_ecc)
                                  & np.isfinite(pars_model[prf_labels].to_numpy()).all(1))
             if len(sel) < 10:
                 print(f'{scope} {roi}: {len(sel)} voxels, skipped', flush=True)
@@ -205,6 +206,7 @@ if __name__ == '__main__':
     ap.add_argument('--points', choices=['keep', 'subtract', 'exclude'], default='keep')
     ap.add_argument('--free-prf', action='store_true', help='fit the PRFs together with the gain fields')
     ap.add_argument('--split-colour', action='store_true', help='distractor gains per colour x value')
+    ap.add_argument('--min-ecc', type=float, default=0., help='only voxels with PRF eccentricity >= this (deg)')
     ap.add_argument('--tag', default='', help='suffix of the output folder, e.g. fbevents_subtract')
     a = ap.parse_args()
     folder = 'gain_fields' if a.prf_model == 'gauss' else f'gain_fields_{a.prf_model}'
@@ -213,4 +215,4 @@ if __name__ == '__main__':
                     f'sub-{a.subject}_gain_fields.tsv')
     main(a.subject, a.rois, a.bids_folder, a.prf_deriv, a.glmsingle_deriv, a.min_r2, a.per_run, a.n_iter,
          a.learning_rate, out, prf_model=a.prf_model, cross_session=a.cross_session, points=a.points,
-         free_prf=a.free_prf, split_colour=a.split_colour)
+         free_prf=a.free_prf, split_colour=a.split_colour, min_ecc=a.min_ecc)
