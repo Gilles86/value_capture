@@ -20,6 +20,7 @@ f  hV4 gain-field high - low value in the six ways to fit it.
 import glob
 from pathlib import Path
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -44,10 +45,23 @@ def wil(v, alternative='two-sided'):
     return stats.wilcoxon(v, alternative=alternative).pvalue if len(v) >= 5 and np.any(v != 0) else np.nan
 
 
-def panel_triplet(ax, s, ylim, ylabel, log=False, test_zero=True, ref=0.):
+def auto_ylim(s, log=False, q=(.03, .97), pad=.08):
+    """Limits that hold the bulk of the subjects; the rest are drawn as triangles at the edge."""
+    v = s[['target', 'low', 'high']].to_numpy().ravel()
+    v = v[np.isfinite(v)]
+    if log:
+        a, b = np.log10(np.quantile(v, q))
+        return 10 ** (a - pad * (b - a)), 10 ** (b + pad * (b - a))
+    a, b = np.quantile(v, q)
+    a, b = min(a, 0.), max(b, 0.)
+    return a - pad * (b - a), b + pad * (b - a)
+
+
+def panel_triplet(ax, s, ylabel, ylim=None, log=False, test=True, ref=0.):
+    """s: one row per subject x roi, columns target / low / high. test=False: medians printed, no tests."""
     s = s.dropna(how='all')
-    """s: one row per subject x roi, columns target / low / high."""
-    lo, hi = ylim
+    lo, hi = ylim or auto_ylim(s, log)
+    test_zero = test
     span = (np.log10(hi) - np.log10(lo)) if log else hi - lo
 
     def above(frac):
@@ -68,11 +82,14 @@ def panel_triplet(ax, s, ylim, ylabel, log=False, test_zero=True, ref=0.):
             m, a, b = median_ci(v, seed=k + 10 * i)
             ax.errorbar(x, m, yerr=[[m - a], [b - m]], fmt='o', ms=4.5, color=col, mec='w', mew=.6, lw=1.4,
                         capsize=0, zorder=4)
+            if not test:
+                ax.text(x, above(.02 + .075 * k), f'{m:.1f}', ha='center', va='bottom', fontsize=5.3, color=col,
+                        clip_on=False)
             if test_zero:
                 p = wil(v - ref)
                 ax.text(x, above(.02 + .075 * k), p_short(p), ha='center', va='bottom', fontsize=5.3,
                         color=col if p < .05 else MUTED, clip_on=False)
-    for roi in ROI_ORDER:                                     # high vs low bracket
+    for roi in (ROI_ORDER if test else []):                   # high vs low bracket
         if roi not in s.index.get_level_values('roi'):
             continue
         g = s.xs(roi, level='roi')
@@ -92,9 +109,9 @@ def panel_triplet(ax, s, ylim, ylabel, log=False, test_zero=True, ref=0.):
     offset_spines(ax)
 
 
-def items_betas():
+def items_betas(points='exclude'):
     f = sorted(glob.glob(str(DATA / 'item_location_responses' / '*.tsv')))
-    t = pd.concat([pd.read_csv(x, sep='\t', dtype={'subject': str}) for x in f]).query("points == 'exclude'")
+    t = pd.concat([pd.read_csv(x, sep='\t', dtype={'subject': str}) for x in f]).query("points == @points")
     # trial-weighted mean over sessions and locations, in % signal change
     t['w'] = t['diff'] * t.n_trials
     g = t.groupby(['subject', 'roi', 'role'])
@@ -103,6 +120,8 @@ def items_betas():
 
 
 def gain_widths(folder='gain_fields_dog_fbevents_free_exclude_widths'):
+    if not glob.glob(str(DATA / folder / '*.tsv')):
+        raise FileNotFoundError(DATA / folder)
     t = pd.concat([pd.read_csv(f, sep='\t', dtype={'subject': str}) for f in glob.glob(str(DATA / folder / '*.tsv'))])
     t = t[t.scope == 'all'].set_index(['subject', 'roi'])
     amp = t[[f'field_gain_{k}' for k in ('target', 'distractor_low', 'distractor_high')]] * 100
@@ -136,59 +155,132 @@ def heading(fig, x, y, letter, parts, size=7.5):
         tx = fig.text(x, y, s, fontsize=size, color=c, va='bottom')
         x += tx.get_window_extent(r).width / fig.bbox.width
 
+RING, APERTURE, ITEM = 4., 3.17, 1   # item ring and bar aperture (deg); the marked item is the upper-right one
+CHARCOAL = '#3E4C59'
+
+
+def icon(fig, rect, kind, color=CHARCOAL):
+    """Small outline of the display showing what a panel measures (after retsupp's stimulus_icon)."""
+    from matplotlib.patches import Circle, FancyArrowPatch, Rectangle
+    a = fig.add_axes(rect)
+    a.set_xlim(-6.4, 6.4)
+    a.set_ylim(-6.4, 6.4)
+    a.set_aspect('equal')
+    a.set_axis_off()
+    xy = [(RING * np.cos(np.radians(45 * i)), RING * np.sin(np.radians(45 * i))) for i in range(8)]
+    ix, iy = xy[ITEM]
+    if kind == 'decoded':
+        a.add_patch(Circle((0, 0), 6.2, facecolor='k', lw=0, zorder=0))
+        g = np.linspace(-5.4, 5.4, 120)
+        X, Y = np.meshgrid(g, g)
+        img = np.exp(-((X - ix) ** 2 + (Y - iy) ** 2) / (2 * .7 ** 2))
+        img += .35 * sum(np.exp(-((X - x) ** 2 + (Y - y) ** 2) / (2 * .6 ** 2)) for k, (x, y) in enumerate(xy) if k != ITEM)
+        im = a.imshow(img, extent=(-5.4, 5.4, -5.4, 5.4), origin='lower', cmap='magma', vmin=0, vmax=1.1, zorder=1)
+        im.set_clip_path(Circle((0, 0), 6.2, transform=a.transData))
+        a.add_patch(Circle((ix, iy), 1.3, fill=False, ec=color, lw=1., ls=(0, (2, 1.2)), zorder=3))
+        return a
+    if kind in ('field', 'width'):
+        g = np.linspace(-5.4, 5.4, 120)
+        X, Y = np.meshgrid(g, g)
+        f = np.exp(-((X - ix) ** 2 + (Y - iy) ** 2) / (2 * 1.1 ** 2))
+        cm = mpl.colors.LinearSegmentedColormap.from_list('f', ['#FFFFFF00', color])
+        a.imshow(f, extent=(-5.4, 5.4, -5.4, 5.4), origin='lower', cmap=cm, vmin=0, vmax=1.4, zorder=0)
+    if kind == 'bar':
+        bx = ix - .4
+        h = np.sqrt(APERTURE ** 2 - bx ** 2)
+        a.add_patch(Rectangle((bx - .3, -h), .6, 2 * h, facecolor='#D5DAE0', lw=0, zorder=1))
+        lo = max(-h, iy - 2.)
+        a.add_patch(Rectangle((bx - .3, lo), .6, h - lo, facecolor=color, lw=0, zorder=1.5))
+    a.add_patch(Circle((0, 0), APERTURE, fill=False, ec=MUTED, lw=.5, zorder=2))
+    for k, (x, y) in enumerate(xy):
+        vert = k % 2 == 0
+        w, hh = (.5, 1.3) if vert else (1.3, .5)
+        a.add_patch(Rectangle((x - w / 2, y - hh / 2), w, hh, facecolor=MUTED if k != ITEM else
+                              (color if kind == 'key' else CHARCOAL), lw=0, zorder=3))
+    if kind == 'item':
+        a.add_patch(Circle((ix, iy), 2., facecolor=color, alpha=.15, ec=color, lw=.7, ls=(0, (2, 1.2)), zorder=2.5))
+    if kind == 'width':
+        r = 1.1 * 1.1775
+        a.add_patch(FancyArrowPatch((ix - r, iy - 1.9), (ix + r, iy - 1.9), arrowstyle='<|-|>', mutation_scale=4,
+                                    color=FG, lw=.6, zorder=4))
+    a.plot(0, 0, '+', color=FG, ms=3, mew=.6, zorder=4)
+    return a
+
+
+def heading_icon(fig, x, y, letter, parts, kind, size=.06):
+    """Panel heading followed by its icon."""
+    heading(fig, x, y, letter, parts)
+    r = fig.canvas.get_renderer()
+    end = max(t.get_window_extent(r).x1 for t in fig.texts[-len(parts):]) / fig.bbox.width
+    h = size
+    w = h * fig.bbox.height / fig.bbox.width
+    icon(fig, [end + .01, y - h / 2 + .006, w, h], kind)
+
 
 def section(fig, y, text):
     fig.text(.012, y, text, fontsize=7.5, color=FG, va='bottom')
     fig.add_artist(plt.Line2D([.012, .99], [y - .005] * 2, color=MUTED, lw=.6, transform=fig.transFigure))
 
 
-def main():
-    betas = items_betas()
-    amp, fwhm = gain_widths()
-    items, bars = decoded()
-    fig = plt.figure(figsize=(DOUBLE, 9.2))
+VARIANTS = {'exclude': dict(decoded='fbevents_dog_none', title='only trials without the points display'),
+            'subtract': dict(decoded='fbevents_dog_regress', title='all trials, points response subtracted')}
+
+
+def main(points='exclude'):
+    betas = items_betas(points)
+    amp, fwhm = gain_widths(f'gain_fields_dog_fbevents_free_{points}_widths')
+    items, bars = decoded(VARIANTS[points]['decoded'])
+    fig = plt.figure(figsize=(DOUBLE, 9.8))
     W, H = .37, .145
     X0, X1 = .1, .605
-    rows = [.74, .415, .09]
+    rows = [.715, .4, .085]
     ax = {k: fig.add_axes([x, y, W, H]) for k, (x, y) in
           dict(a=(X0, rows[0]), b=(X1, rows[0]), c=(X0, rows[1]), d=(X1, rows[1]), e=(X0, rows[2])).items()}
     ax['f'] = fig.add_axes([X1 + .17, rows[2], .12, H])
     data = dict(a=betas, b=amp, c=fwhm, d=items, e=bars)
-    panel_triplet(ax['a'], betas, (-.4, .8), 'Response vs neutral\n(% signal)')
-    panel_triplet(ax['b'], amp, (-80, 300), 'Gain-field\namplitude (%)')
-    panel_triplet(ax['c'], fwhm, (.3, 30), 'Gain-field width,\nFWHM (deg)', log=True, test_zero=False)
-    panel_triplet(ax['d'], items, (-25, 45), 'Decoded item vs\nneutral item (%)')
-    panel_triplet(ax['e'], bars, (-40, 50), 'Decoded bar near item\nvs far part (%)')
+    panel_triplet(ax['a'], betas, 'Response vs neutral\n(% signal)')
+    panel_triplet(ax['b'], amp, 'Gain-field\namplitude (%)')
+    panel_triplet(ax['c'], fwhm, 'Gain-field width,\nFWHM (deg)', log=True, test=False)
+    panel_triplet(ax['d'], items, 'Decoded item vs\nneutral item (%)')
+    panel_triplet(ax['e'], bars, 'Decoded bar near item\nvs far part (%)')
     for k in 'abcde':
         n = data[k].dropna(how='all').reset_index().groupby('roi').subject.nunique().to_dict()
         roi_axis(ax[k], n)
-    panel_fits(ax['f'], load())
+    panel_fits(ax['f'], load())   # all six fits, whatever the points handling of the rest
     ax['f'].set_xlabel('hV4 gain field,\nhigh − low value (%)', fontsize=7)
 
     def top(r):
         return rows[r] + H
-    section(fig, top(0) + .085, 'Measured: the single-trial response where the item is, and the gain field fitted to it')
+    section(fig, top(0) + .1, 'Measured: the single-trial response where the item is, and the gain field fitted to it')
+    x = .57
     r = fig.canvas.get_renderer()
-    x = .6
-    for lab, c in [('Target', TARGET), ('Low value', LOW), ('High value', HIGH)]:
-        tx = fig.text(x, top(0) + .087, '● ' + lab, color=c, fontsize=7, va='bottom')
-        x += tx.get_window_extent(r).width / fig.bbox.width + .025
-    heading(fig, .012, top(0) + .055, 'a', [('Response at the item location (', FG), ('p', FG),
-                                           (' vs 0 per series; bracket: high > low, one-sided)', MUTED)])
-    heading(fig, X1 - .07, top(0) + .055, 'b', [('Gain-field amplitude per effect', FG)])
-    section(fig, top(1) + .085, 'Gain-field width, and the stimulus drive decoded from the same betas')
-    heading(fig, .012, top(1) + .055, 'c', [('Gain-field width per effect (', FG), ('bracket: high > low, one-sided', MUTED),
-                                           (')', FG)])
-    heading(fig, X1 - .07, top(1) + .055, 'd', [('Decoded intensity of the item', FG)])
-    section(fig, top(2) + .085, 'Decoded bar near the item, and hV4 across analysis choices')
-    heading(fig, .012, top(2) + .055, 'e', [('Decoded bar within 2° of the item', FG)])
-    heading(fig, X1 - .07, top(2) + .055, 'f', [('hV4: ', FG), ('high', HIGH), (' vs ', FG), ('low', LOW),
-                                                (' in the six gain-field fits', FG)])
+    for lab, c in [('Target', TARGET), ('Low-value distractor', LOW), ('High-value distractor', HIGH)]:
+        h = .03
+        icon(fig, [x, top(0) + .097, h * fig.bbox.height / fig.bbox.width, h], 'key', color=c)
+        tx = fig.text(x + h * fig.bbox.height / fig.bbox.width + .004, top(0) + .112, lab, color=c, fontsize=7,
+                      va='center')
+        x = tx.get_window_extent(r).x1 / fig.bbox.width + .02
+    heading_icon(fig, .012, top(0) + .06, 'a', [('Response where the item is', FG)], 'item')
+    heading_icon(fig, X1 - .07, top(0) + .06, 'b', [('Gain-field amplitude', FG)], 'field')
+    section(fig, top(1) + .1, 'Gain-field width, and the stimulus drive decoded from the same betas')
+    heading_icon(fig, .012, top(1) + .06, 'c', [('Gain-field width', FG), (' (numbers: medians)', MUTED)], 'width')
+    heading_icon(fig, X1 - .07, top(1) + .06, 'd', [('Decoded intensity of the item', FG)], 'decoded')
+    section(fig, top(2) + .1, 'Decoded bar near the item, and hV4 across analysis choices')
+    heading_icon(fig, .012, top(2) + .06, 'e', [('Decoded bar within 2° of the item', FG)], 'bar')
+    heading(fig, X1 - .07, top(2) + .06, 'f', [('hV4: ', FG), ('high', HIGH), (' vs ', FG), ('low', LOW),
+                                               (' in the six gain-field fits', FG)])
+    fig.text(.99, .995, 'Numbers: p vs 0 per series; bracket: high > low, one-sided', ha='right', va='top',
+             fontsize=6, color=MUTED)
     OUT.mkdir(exist_ok=True)
-    fig.savefig(OUT / 'fig_value_items.pdf', dpi=300)
-    fig.savefig(OUT / 'fig_value_items.png', dpi=200)
-    print(OUT / 'fig_value_items.pdf')
+    fig.text(.012, .995, f"DoG pRFs; {VARIANTS[points]['title']}", ha='left', va='top', fontsize=6.5, color=MUTED)
+    name = 'fig_value_items' + ('' if points == 'exclude' else f'_{points}')
+    fig.savefig(OUT / f'{name}.pdf', dpi=300)
+    fig.savefig(OUT / f'{name}.png', dpi=200)
+    print(OUT / f'{name}.pdf')
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--points', choices=list(VARIANTS), default='exclude')
+    main(ap.parse_args().points)
