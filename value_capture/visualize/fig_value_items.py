@@ -252,10 +252,10 @@ def main(points='exclude'):
     def top(r):
         return rows[r] + H
     section(fig, top(0) + .1, 'Measured: the single-trial response where the item is, and the gain field fitted to it')
-    x = .57
+    x = .5
     r = fig.canvas.get_renderer()
     for lab, c in [('Target', TARGET), ('Low-value distractor', LOW), ('High-value distractor', HIGH)]:
-        h = .03
+        h = .036
         icon(fig, [x, top(0) + .097, h * fig.bbox.height / fig.bbox.width, h], 'key', color=c)
         tx = fig.text(x + h * fig.bbox.height / fig.bbox.width + .004, top(0) + .112, lab, color=c, fontsize=7,
                       va='center')
