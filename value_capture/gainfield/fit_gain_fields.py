@@ -96,8 +96,9 @@ def r2(y, yhat):
 
 
 def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out, prf_model='gauss',
-         cross_session=False, points='keep', free_prf=False, split_colour=False, min_ecc=0.):
+         cross_session=False, points='keep', free_prf=False, split_colour=False, min_ecc=0., separate_widths=False):
     from braincoder.models import GainFieldDoGPRF2D, GainFieldPRF2D
+    from braincoder.models.gain_field import GainField
     from braincoder.optimize import ParameterFitter
 
     from value_capture.decode.aggregate_decoded import remove_points
@@ -125,7 +126,20 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
             return imgs * (m * (1.0 - keep) + keep)
         extra = dict(image_scales={'points_weight': layer}, combination=combine)
         print(f'points layer: {len(patch)} pixels, {int(trials.show_feedback.sum())} trials with points', flush=True)
+    if separate_widths:                               # one field per gain label, each with its own width
+        extra['fields'] = [GainField(name=f'field_{k}', gain_labels=[k]) for k in gain_labels]
     model = model_class(grid_coordinates=grid, field_positions=fp.ITEM_XY, gain_labels=gain_labels, **extra)
+    sigma_labels = [l for l in model.field_parameter_labels() if l.endswith('sigma')]
+
+    def out_name(l):                                  # field_<k>_gain_<k> -> field_gain_<k>; field_<k>_sigma -> field_sigma_<k>
+        if not separate_widths:
+            return l
+        for k in gain_labels:
+            if l == f'field_{k}_gain_{k}':
+                return f'field_gain_{k}'
+            if l == f'field_{k}_sigma':
+                return f'field_sigma_{k}'
+        return l
     prf_labels = model.prf_parameter_labels()
     paradigm_all = model.make_paradigm(images, assignments(trials, split_colour))
 
@@ -167,7 +181,7 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
                 continue
             prf = pars_model.iloc[sel][prf_labels].reset_index(drop=True).astype(np.float32)
             data = pd.DataFrame(Y[:, sel], index=paradigm.index)
-            init = model.add_field_parameters(prf, field_sigma=1.5)
+            init = model.add_field_parameters(prf, **{l: 1.5 for l in sigma_labels})
 
             def fit(d, p, init_pars, fixed):
                 shared = [l for l in model.field_parameter_labels(include_tied=False) if l not in fixed]
@@ -187,18 +201,19 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
             pred0 = model.predict(paradigm=paradigm, parameters=base)
             row = dict(subject=subject, roi=roi, scope=scope, points=points, free_prf=free_prf, n_voxels=len(sel), n_trials=len(data),
                        r2_prf=float(np.median(r2(data, pred0))), r2_gain=float(np.median(r2(data, pred))))
-            row.update({l: float(est[l].iloc[0]) for l in model.field_parameter_labels()})
+            row.update({out_name(l): float(est[l].iloc[0]) for l in model.field_parameter_labels()})
             rows.append(row)
-            print(f"{scope} {roi}: {len(sel)} voxels, {len(data)} trials, sigma={row['field_sigma']:.2f}, "
+            print(f"{scope} {roi}: {len(sel)} voxels, {len(data)} trials, "
+                  + ', '.join(f'{out_name(l)}={est[l].iloc[0]:.2f}' for l in sigma_labels) + ', '
                   + ', '.join(f"{k}={row['field_gain_' + k]:+.3f}" for k in gain_labels), flush=True)
             if per_run:
-                fixed = model.prf_parameter_labels() + ['field_sigma'] + (['points_weight'] if points == 'model' else [])
+                fixed = model.prf_parameter_labels() + sigma_labels + (['points_weight'] if points == 'model' else [])
                 for (s, r), ridx in tr.groupby(['session', 'run']).groups.items():
                     ridx = np.asarray(sorted(ridx))
                     e, _ = fit(data.iloc[ridx], paradigm.iloc[ridx], est, fixed)
                     rr = dict(subject=subject, roi=roi, scope=f'run-{s}-{r}', session=s, run=r, points=points,
                               n_voxels=len(sel), n_trials=len(ridx))
-                    rr.update({l: float(e[l].iloc[0]) for l in model.field_parameter_labels()})
+                    rr.update({out_name(l): float(e[l].iloc[0]) for l in model.field_parameter_labels()})
                     rows.append(rr)
     t = pd.DataFrame(rows)
     out = Path(out)
@@ -227,6 +242,7 @@ if __name__ == '__main__':
     ap.add_argument('--free-prf', action='store_true', help='fit the PRFs together with the gain fields')
     ap.add_argument('--split-colour', action='store_true', help='distractor gains per colour x value')
     ap.add_argument('--min-ecc', type=float, default=0., help='only voxels with PRF eccentricity >= this (deg)')
+    ap.add_argument('--separate-widths', action='store_true', help='one field (own width) per gain label')
     ap.add_argument('--tag', default='', help='suffix of the output folder, e.g. fbevents_subtract')
     a = ap.parse_args()
     folder = 'gain_fields' if a.prf_model == 'gauss' else f'gain_fields_{a.prf_model}'
@@ -235,4 +251,4 @@ if __name__ == '__main__':
                     f'sub-{a.subject}_gain_fields.tsv')
     main(a.subject, a.rois, a.bids_folder, a.prf_deriv, a.glmsingle_deriv, a.min_r2, a.per_run, a.n_iter,
          a.learning_rate, out, prf_model=a.prf_model, cross_session=a.cross_session, points=a.points,
-         free_prf=a.free_prf, split_colour=a.split_colour, min_ecc=a.min_ecc)
+         free_prf=a.free_prf, split_colour=a.split_colour, min_ecc=a.min_ecc, separate_widths=a.separate_widths)
