@@ -4,6 +4,7 @@ Style of retsupp Figs. 3, 5 and 6. Primary pipeline throughout: glmsingle_fbeven
 points display, DoG pRFs. Per area: dots = subjects (triangles beyond the axis), points and bars = median and
 bootstrapped 95% CI; numbers above = Wilcoxon signed-rank p against 0 per series; brackets = p of high vs low value
 (one-sided Wilcoxon, high > low). All p uncorrected.
+Right of the divider: each pathway pooled, per subject the mean over its areas (Dorsal = V3AB only).
 
 a  Single-trial response at the item's location: voxels with a pRF (fitted on the other session) within 2 deg of
    the item, the item as target / low / high-value distractor minus the same location holding a neutral item with
@@ -13,7 +14,6 @@ c  Gain-field width (FWHM) per effect.
 d  Decoded intensity of the item, vs. the same item when neutral at the same bar position (outline decoder).
 e  Decoded intensity of the bar within 2 deg of the item, vs. the far part (>= 3.5 deg) of the same bar on the same
    trial.
-f  hV4 gain-field high - low value in the six ways to fit it.
 
     python value_capture/visualize/fig_value_items.py
 """
@@ -33,6 +33,50 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / 'notes' / 'data'
 OUT = ROOT / 'notes' / 'figures'
 TERMS = [('target', TARGET, -.27), ('low', LOW, 0.), ('high', HIGH, .27)]
+# Pathways pooled per subject (mean over its areas), tested as well; drawn right of a divider
+POOLED = [('Early', ('V1', 'V2', 'V3')), ('Dorsal', ('V3AB',)), ('Occ.-temp.', ('hV4', 'LO'))]
+XPOS = dict(ROI_X)
+_x0 = max(ROI_X.values()) + 1.9
+for _i, (_n, _) in enumerate(POOLED):
+    XPOS[_n] = _x0 + 1.05 * _i
+ORDER = ROI_ORDER + [n for n, _ in POOLED]
+
+
+def with_pooled(s, log=False):
+    """Add one row per subject and pathway: the mean over the pathway's areas (geometric mean if log)."""
+    out = [s]
+    for name, rois in POOLED:
+        sub = s[s.index.get_level_values('roi').isin(rois)]
+        if not len(sub):
+            continue
+        g = (np.exp(np.log(sub).groupby(level='subject').mean()) if log else sub.groupby(level='subject').mean())
+        out.append(g.assign(roi=name).set_index('roi', append=True))
+    return pd.concat(out)
+
+
+def pooled_axis(ax, n_per, pad_pt=3):
+    import matplotlib.transforms as mtrans
+    from value_capture.visualize.fig_value_gain import ROI_GROUPS
+    xs = [XPOS[r] for r in ORDER]
+    ax.set_xticks(xs, [r if n_per.get(r, 0) >= 11 else f'{r}\n(n = {n_per.get(r, 0)})' for r in ORDER],
+                  fontsize=6.5)
+    for t, r in zip(ax.get_xticklabels(), ORDER):
+        if r in dict(POOLED):
+            t.set_fontweight('bold')
+    ax.set_xlim(xs[0] - .6, xs[-1] + .6)
+    ax.axvline(_x0 - .95, color=MUTED, lw=.6, zorder=0)
+    fig = ax.figure
+    fig.canvas.draw()
+    inv = ax.transAxes.inverted()
+    bottom = min(inv.transform((0, t.get_window_extent().y0))[1] for t in ax.get_xticklabels() if t.get_text())
+    tr = mtrans.blended_transform_factory(ax.transData, ax.transAxes)
+    groups = list(ROI_GROUPS) + [('Pathway, pooled', [n for n, _ in POOLED])]
+    for name, rois in groups:
+        x0, x1 = XPOS[rois[0]] - .38, XPOS[rois[-1]] + .38
+        ax.plot([x0, x1], [bottom] * 2, transform=mtrans.offset_copy(tr, fig=fig, y=-pad_pt, units='points'),
+                color=MUTED, lw=.7, clip_on=False, solid_capstyle='butt')
+        ax.text((x0 + x1) / 2, bottom, name, transform=mtrans.offset_copy(tr, fig=fig, y=-pad_pt - 1.5, units='points'),
+                ha='center', va='top', fontsize=6, color='.4', clip_on=False)
 
 
 def p_short(p):
@@ -59,7 +103,7 @@ def auto_ylim(s, log=False, q=(.03, .97), pad=.08):
 
 def panel_triplet(ax, s, ylabel, ylim=None, log=False, test=True, ref=0.):
     """s: one row per subject x roi, columns target / low / high. test=False: medians printed, no tests."""
-    s = s.dropna(how='all')
+    s = with_pooled(s.dropna(how='all'), log)
     lo, hi = ylim or auto_ylim(s, log)
     test_zero = test
     span = (np.log10(hi) - np.log10(lo)) if log else hi - lo
@@ -67,11 +111,11 @@ def panel_triplet(ax, s, ylabel, ylim=None, log=False, test=True, ref=0.):
     def above(frac):
         return 10 ** (np.log10(hi) + frac * span) if log else hi + frac * span
     for k, (term, col, dx) in enumerate(TERMS):
-        for i, roi in enumerate(ROI_ORDER):
+        for i, roi in enumerate(ORDER):
             if roi not in s.index.get_level_values('roi'):
                 continue
             v = s.xs(roi, level='roi')[term].dropna().to_numpy()
-            x = ROI_X[roi] + dx
+            x = XPOS[roi] + dx
             xx = x + np.random.default_rng(10 * k + i).uniform(-.07, .07, len(v))
             ok = (v >= lo) & (v <= hi)
             ax.scatter(xx[ok], v[ok], s=6, color=col, alpha=.35, lw=0, zorder=1)
@@ -89,13 +133,13 @@ def panel_triplet(ax, s, ylabel, ylim=None, log=False, test=True, ref=0.):
                 p = wil(v - ref)
                 ax.text(x, above(.02 + .075 * k), p_short(p), ha='center', va='bottom', fontsize=5.3,
                         color=col if p < .05 else MUTED, clip_on=False)
-    for roi in (ROI_ORDER if test else []):                   # high vs low bracket
+    for roi in (ORDER if test else []):                   # high vs low bracket
         if roi not in s.index.get_level_values('roi'):
             continue
         g = s.xs(roi, level='roi')
         p = wil(g.high - g.low, 'greater')
         y = above(.3 if test_zero else .07)
-        x0, x1 = ROI_X[roi], ROI_X[roi] + .27
+        x0, x1 = XPOS[roi], XPOS[roi] + .27
         yb = above(.27 if test_zero else .04)
         ax.plot([x0, x0, x1, x1], [yb, y, y, yb], color=HIGH if p < .1 else FG, lw=.6, clip_on=False)
         ax.text((x0 + x1) / 2, y, p_short(p), ha='center', va='bottom', fontsize=5.5,
@@ -226,53 +270,49 @@ VARIANTS = {'exclude': dict(decoded='fbevents_dog_none', title='only trials with
             'subtract': dict(decoded='fbevents_dog_regress', title='all trials, points response subtracted')}
 
 
+PANELS = [  # key, data, y label, icon, heading, extra panel_triplet kwargs
+    ('a', 'betas', 'Response vs neutral\n(% signal)', 'item',
+     [('Measured response where the item is', FG), ('  (pRF within 2° of the item; vs the same location '
+                                                     'when neutral, same bar position)', MUTED)], {}),
+    ('b', 'amp', 'Gain-field\namplitude (%)', 'field',
+     [('Gain-field amplitude', FG), ('  (one field per effect, pRFs fitted jointly)', MUTED)], {}),
+    ('c', 'fwhm', 'Gain-field width,\nFWHM (deg)', 'width',
+     [('Gain-field width', FG), ('  (numbers: medians; no tests)', MUTED)], dict(log=True, test=False)),
+    ('d', 'items', 'Decoded item vs\nneutral item (%)', 'decoded',
+     [('Decoded intensity of the item', FG), ('  (vs the same item when neutral, same bar position)', MUTED)], {}),
+    ('e', 'bars', 'Decoded bar near item\nvs far part (%)', 'bar',
+     [('Decoded bar within 2° of the item', FG), ('  (vs the far part of the same bar, same trial)', MUTED)], {}),
+]
+
+
 def main(points='exclude'):
-    betas = items_betas(points)
     amp, fwhm = gain_widths(f'gain_fields_dog_fbevents_free_{points}_widths')
     items, bars = decoded(VARIANTS[points]['decoded'])
-    fig = plt.figure(figsize=(DOUBLE, 9.8))
-    W, H = .37, .145
-    X0, X1 = .1, .605
-    rows = [.715, .4, .085]
-    ax = {k: fig.add_axes([x, y, W, H]) for k, (x, y) in
-          dict(a=(X0, rows[0]), b=(X1, rows[0]), c=(X0, rows[1]), d=(X1, rows[1]), e=(X0, rows[2])).items()}
-    ax['f'] = fig.add_axes([X1 + .17, rows[2], .12, H])
-    data = dict(a=betas, b=amp, c=fwhm, d=items, e=bars)
-    panel_triplet(ax['a'], betas, 'Response vs neutral\n(% signal)')
-    panel_triplet(ax['b'], amp, 'Gain-field\namplitude (%)')
-    panel_triplet(ax['c'], fwhm, 'Gain-field width,\nFWHM (deg)', log=True, test=False)
-    panel_triplet(ax['d'], items, 'Decoded item vs\nneutral item (%)')
-    panel_triplet(ax['e'], bars, 'Decoded bar near item\nvs far part (%)')
-    for k in 'abcde':
-        n = data[k].dropna(how='all').reset_index().groupby('roi').subject.nunique().to_dict()
-        roi_axis(ax[k], n)
-    panel_fits(ax['f'], load())   # all six fits, whatever the points handling of the rest
-    ax['f'].set_xlabel('hV4 gain field,\nhigh − low value (%)', fontsize=7)
-
-    def top(r):
-        return rows[r] + H
-    section(fig, top(0) + .1, 'Measured: the single-trial response where the item is, and the gain field fitted to it')
-    x = .5
+    data = dict(betas=items_betas(points), amp=amp, fwhm=fwhm, items=items, bars=bars)
+    fig = plt.figure(figsize=(DOUBLE, 13.5))
+    X, W, H, step = .1, .76, .085, .19
+    tops = [.9 - i * step for i in range(len(PANELS))]
     r = fig.canvas.get_renderer()
-    for lab, c in [('Target', TARGET), ('Low-value distractor', LOW), ('High-value distractor', HIGH)]:
-        h = .036
-        icon(fig, [x, top(0) + .097, h * fig.bbox.height / fig.bbox.width, h], 'key', color=c)
-        tx = fig.text(x + h * fig.bbox.height / fig.bbox.width + .004, top(0) + .112, lab, color=c, fontsize=7,
-                      va='center')
-        x = tx.get_window_extent(r).x1 / fig.bbox.width + .02
-    heading_icon(fig, .012, top(0) + .06, 'a', [('Response where the item is', FG)], 'item')
-    heading_icon(fig, X1 - .07, top(0) + .06, 'b', [('Gain-field amplitude', FG)], 'field')
-    section(fig, top(1) + .1, 'Gain-field width, and the stimulus drive decoded from the same betas')
-    heading_icon(fig, .012, top(1) + .06, 'c', [('Gain-field width', FG), (' (numbers: medians)', MUTED)], 'width')
-    heading_icon(fig, X1 - .07, top(1) + .06, 'd', [('Decoded intensity of the item', FG)], 'decoded')
-    section(fig, top(2) + .1, 'Decoded bar near the item, and hV4 across analysis choices')
-    heading_icon(fig, .012, top(2) + .06, 'e', [('Decoded bar within 2° of the item', FG)], 'bar')
-    heading(fig, X1 - .07, top(2) + .06, 'f', [('hV4: ', FG), ('high', HIGH), (' vs ', FG), ('low', LOW),
-                                               (' in the six gain-field fits', FG)])
-    fig.text(.99, .995, 'Numbers: p vs 0 per series; bracket: high > low, one-sided', ha='right', va='top',
-             fontsize=6, color=MUTED)
-    OUT.mkdir(exist_ok=True)
     fig.text(.012, .995, f"DoG pRFs; {VARIANTS[points]['title']}", ha='left', va='top', fontsize=6.5, color=MUTED)
+    fig.text(.99, .995, 'Numbers above: p vs 0 per series; bracket: high > low, one-sided. Right of the divider: '
+             'pathways pooled per subject', ha='right', va='top', fontsize=6, color=MUTED)
+    x = .012
+    for lab, c in [('Target', TARGET), ('Low-value distractor', LOW), ('High-value distractor', HIGH)]:
+        h = .026
+        w = h * fig.bbox.height / fig.bbox.width
+        icon(fig, [x, .962, w, h], 'key', color=c)
+        tx = fig.text(x + w + .004, .972, lab, color=c, fontsize=7.5, va='center')
+        x = tx.get_window_extent(r).x1 / fig.bbox.width + .03
+    for (k, key, ylabel, kind, head, kw), top in zip(PANELS, tops):
+        ax = fig.add_axes([X, top - H, W, H])
+        d = data[key]
+        panel_triplet(ax, d, ylabel, **kw)
+        n = with_pooled(d.dropna(how='all')).reset_index().groupby('roi').subject.nunique().to_dict()
+        pooled_axis(ax, n)
+        heading(fig, .012, top + .045, k, head)
+        h = .075
+        icon(fig, [.865, top - H / 2 - h / 2, h * fig.bbox.height / fig.bbox.width, h], kind)
+    OUT.mkdir(exist_ok=True)
     name = 'fig_value_items' + ('' if points == 'exclude' else f'_{points}')
     fig.savefig(OUT / f'{name}.pdf', dpi=300)
     fig.savefig(OUT / f'{name}.png', dpi=200)
