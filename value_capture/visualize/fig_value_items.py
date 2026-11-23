@@ -4,7 +4,7 @@ Style of retsupp Figs. 3, 5 and 6. Primary pipeline throughout: glmsingle_fbeven
 points display, DoG pRFs. Per area: dots = subjects (triangles beyond the axis), points and bars = median and
 bootstrapped 95% CI; numbers above = Wilcoxon signed-rank p against 0 per series; brackets = p of high vs low value
 (one-sided Wilcoxon, high > low). All p uncorrected.
-Right of the divider: each pathway pooled, per subject the mean over its areas (Dorsal = V3AB only).
+Right of the divider: each pathway pooled, per subject the mean over its areas .
 
 a  Single-trial response at the item's location: voxels with a pRF (fitted on the other session) within 2 deg of
    the item, the item as target / low / high-value distractor minus the same location holding a neutral item with
@@ -34,7 +34,7 @@ DATA = ROOT / 'notes' / 'data'
 OUT = ROOT / 'notes' / 'figures'
 TERMS = [('target', TARGET, -.27), ('low', LOW, 0.), ('high', HIGH, .27)]
 # Pathways pooled per subject (mean over its areas), tested as well; drawn right of a divider
-POOLED = [('Early', ('V1', 'V2', 'V3')), ('Dorsal', ('V3AB',)), ('Occ.-temp.', ('hV4', 'LO'))]
+POOLED = [('Early', ('V1', 'V2', 'V3')), ('Dorsal', ('V3AB', 'IPS')), ('Occ.-temp.', ('hV4', 'VO', 'LO', 'TO'))]
 XPOS = dict(ROI_X)
 _x0 = max(ROI_X.values()) + 1.9
 for _i, (_n, _) in enumerate(POOLED):

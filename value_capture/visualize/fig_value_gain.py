@@ -37,7 +37,8 @@ mpl.rcParams.update({
 DOUBLE = 180 / 25.4
 FG, MUTED = '#1F2933', '#9AA5B1'
 TARGET, LOW, HIGH = '#F77F00', '#009E73', '#7B3294'
-ROI_GROUPS = [('Early', ('V1', 'V2', 'V3')), ('Dorsal', ('V3AB',)), ('Occipitotemporal', ('hV4', 'LO'))]
+ROI_GROUPS = [('Early', ('V1', 'V2', 'V3')), ('Dorsal', ('V3AB', 'IPS')),
+              ('Occipitotemporal', ('hV4', 'VO', 'LO', 'TO'))]
 GROUP_GAP = 1.
 ROI_ORDER = [r for _, g in ROI_GROUPS for r in g]
 ROI_X, _x = {}, 0.
