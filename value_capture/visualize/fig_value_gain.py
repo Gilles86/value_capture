@@ -53,11 +53,18 @@ PRIMARY = ('dog', 'exclude')
 POINTS = {'exclude': 'points trials excluded', 'subtract': 'points subtracted', 'model': 'points modelled'}
 
 
+def read_tsvs(pattern):
+    """All non-empty TSVs matching ``pattern`` (fits that skipped every area write an empty file)."""
+    import os
+    return pd.concat([pd.read_csv(f, sep='\t', dtype={'subject': str}) for f in glob.glob(str(pattern))
+                      if os.path.getsize(f) > 1])
+
+
 def load():
     out = []
     for prf, points in FITS:
         d = DATA / f"gain_fields{'_dog' if prf == 'dog' else ''}_fbevents_free_{points}"
-        t = pd.concat([pd.read_csv(f, sep='\t', dtype={'subject': str}) for f in glob.glob(f'{d}/*.tsv')])
+        t = read_tsvs(f'{d}/*.tsv')
         out.append(t[t.scope == 'all'].assign(prf=prf, points=points))
     t = pd.concat(out).rename(columns={'field_gain_target': 'target', 'field_gain_distractor_low': 'low',
                                        'field_gain_distractor_high': 'high'})

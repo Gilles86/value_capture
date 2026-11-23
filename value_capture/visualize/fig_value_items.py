@@ -27,7 +27,7 @@ import pandas as pd
 from scipy import stats
 
 from value_capture.visualize.fig_value_gain import (DOUBLE, FG, HIGH, LOW, MUTED, ROI_ORDER, ROI_X, TARGET, load,
-                                                     median_ci, offset_spines, panel_fits, roi_axis)
+                                                     median_ci, offset_spines, panel_fits, read_tsvs, roi_axis)
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / 'notes' / 'data'
@@ -80,6 +80,8 @@ def pooled_axis(ax, n_per, pad_pt=3):
 
 
 def p_short(p):
+    if not np.isfinite(p):
+        return ''
     return '<.001' if p < .001 else (f'{p:.3f}' if p < .01 else f'{p:.2f}').replace('0.', '.')
 
 
@@ -138,6 +140,8 @@ def panel_triplet(ax, s, ylabel, ylim=None, log=False, test=True, ref=0.):
             continue
         g = s.xs(roi, level='roi')
         p = wil(g.high - g.low, 'greater')
+        if not np.isfinite(p):
+            continue
         y = above(.3 if test_zero else .07)
         x0, x1 = XPOS[roi], XPOS[roi] + .27
         yb = above(.27 if test_zero else .04)
@@ -163,16 +167,24 @@ def items_betas(points='exclude'):
     return s.rename(columns={'distractor_low': 'low', 'distractor_high': 'high'})[['target', 'low', 'high']]
 
 
-def gain_widths(folder='gain_fields_dog_fbevents_free_exclude_widths'):
-    if not glob.glob(str(DATA / folder / '*.tsv')):
-        raise FileNotFoundError(DATA / folder)
-    t = pd.concat([pd.read_csv(f, sep='\t', dtype={'subject': str}) for f in glob.glob(str(DATA / folder / '*.tsv'))])
+def gain_widths(folder='gain_fields_dog_fbevents_free_exclude_widths', fallback=None):
+    """Amplitude and FWHM per effect from the fits with one field per effect. While those are incomplete (fewer than
+    12 subjects with the main areas), ``fallback`` (the shared-width fit) is used for every area instead; the third
+    value returned says which."""
+    main = glob.glob(str(DATA / folder / 'sub-*_gain_fields.tsv'))
+    shared = len(main) < 12
+    if shared:
+        folder = fallback
+    t = read_tsvs(DATA / folder / '*.tsv')
     t = t[t.scope == 'all'].set_index(['subject', 'roi'])
     amp = t[[f'field_gain_{k}' for k in ('target', 'distractor_low', 'distractor_high')]] * 100
     amp.columns = ['target', 'low', 'high']
-    fwhm = t[[f'field_sigma_{k}' for k in ('target', 'distractor_low', 'distractor_high')]] * 2.355
-    fwhm.columns = ['target', 'low', 'high']
-    return amp, fwhm
+    if shared:
+        fwhm = pd.DataFrame({k: t.field_sigma * 2.355 for k in ('target', 'low', 'high')})
+    else:
+        fwhm = t[[f'field_sigma_{k}' for k in ('target', 'distractor_low', 'distractor_high')]] * 2.355
+        fwhm.columns = ['target', 'low', 'high']
+    return amp, fwhm, shared
 
 
 def decoded(variant='fbevents_dog_none'):
@@ -286,7 +298,8 @@ PANELS = [  # key, data, y label, icon, heading, extra panel_triplet kwargs
 
 
 def main(points='exclude'):
-    amp, fwhm = gain_widths(f'gain_fields_dog_fbevents_free_{points}_widths')
+    amp, fwhm, shared = gain_widths(f'gain_fields_dog_fbevents_free_{points}_widths',
+                                    fallback=f'gain_fields_dog_fbevents_free_{points}')
     items, bars = decoded(VARIANTS[points]['decoded'])
     data = dict(betas=items_betas(points), amp=amp, fwhm=fwhm, items=items, bars=bars)
     fig = plt.figure(figsize=(DOUBLE, 13.5))
@@ -309,6 +322,9 @@ def main(points='exclude'):
         panel_triplet(ax, d, ylabel, **kw)
         n = with_pooled(d.dropna(how='all')).reset_index().groupby('roi').subject.nunique().to_dict()
         pooled_axis(ax, n)
+        if shared and k in 'bc':
+            head = [head[0], ('  (PROVISIONAL: one width shared by the three effects; per-effect fits still running)',
+                              MUTED)]
         heading(fig, .012, top + .045, k, head)
         h = .075
         icon(fig, [.865, top - H / 2 - h / 2, h * fig.bbox.height / fig.bbox.width, h], kind)

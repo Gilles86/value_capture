@@ -18,6 +18,7 @@ Runs in pycortex2::
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import tempfile
 import time
@@ -40,8 +41,11 @@ CURV = dict(brightness=.55, contrast=.17, smooth=20)
 PANELS = {'angle': ('hsv', 0, 1), 'ecc': ('nipy_spectral', 0, 5),
           'sd': ('nipy_spectral', 0, 2), 'r2': ('inferno', 0, .6)}
 PRF_DIR = 'prf_glmsingle_items'   # bar + search items (2026-11-17); 'prf_glmsingle' = bar only
+# 'unfold' runs fiducial -> inflated -> flat when the subject has a flatmap (0 / .5 / 1) and
+# fiducial -> inflated (0 / 1) when it has none; main() sets it (the flatmaps came 2026-11-18).
 BASE_VIEW = {'camera.target': [0, 0, 0], 'camera.radius': 190, 'surface.{subject}.unfold': 1,
-             'surface.{subject}.specularity': 0}
+             'surface.{subject}.specularity': 0,
+             'surface.{subject}.left': True, 'surface.{subject}.right': True}
 VIEWS = {
     'back': {'camera.azimuth': 180, 'camera.altitude': 90,
              'surface.{subject}.pivot': 0, 'surface.{subject}.shift': 0},
@@ -71,6 +75,28 @@ VIEWS = {
                   'surface.{subject}.pivot': 0, 'surface.{subject}.shift': 0},
     'lateral': {'camera.azimuth': 180, 'camera.altitude': 90,
                 'surface.{subject}.pivot': 180, 'surface.{subject}.shift': 10},
+    # Whole hemispheres, one at a time (other hemisphere hidden), for the whole-brain
+    # supplement (figS_prf_whole_brain.py): azimuth 90 faces the left, 270 the right side.
+    'lateral_lh': {'camera.azimuth': 90, 'camera.altitude': 90, 'camera.radius': 260,
+                   'surface.{subject}.pivot': 0, 'surface.{subject}.shift': 0,
+                   'surface.{subject}.right': False},
+    'medial_lh': {'camera.azimuth': 270, 'camera.altitude': 90, 'camera.radius': 260,
+                  'surface.{subject}.pivot': 0, 'surface.{subject}.shift': 0,
+                  'surface.{subject}.right': False},
+    'medial_rh': {'camera.azimuth': 90, 'camera.altitude': 90, 'camera.radius': 260,
+                  'surface.{subject}.pivot': 0, 'surface.{subject}.shift': 0,
+                  'surface.{subject}.left': False},
+    'lateral_rh': {'camera.azimuth': 270, 'camera.altitude': 90, 'camera.radius': 260,
+                   'surface.{subject}.pivot': 0, 'surface.{subject}.shift': 0,
+                   'surface.{subject}.left': False},
+    'ventral_whole': {'camera.azimuth': 180, 'camera.altitude': 178, 'camera.radius': 280,
+                      'surface.{subject}.pivot': 0, 'surface.{subject}.shift': 0},
+    # pole2 pulled back: pole2 crops sub-12's (large) occipital lobe at the bottom
+    'posterior': {'camera.azimuth': 180, 'camera.altitude': 100, 'camera.radius': 245,
+                  'camera.target': [0, 0, 12],
+                  'surface.{subject}.pivot': 0, 'surface.{subject}.shift': 0},
+    'dorsal_whole': {'camera.azimuth': 180, 'camera.altitude': 2, 'camera.radius': 280,
+                     'surface.{subject}.pivot': 0, 'surface.{subject}.shift': 0},
 }
 IMAGE_SIZE = (2400, 1800)
 # Visual areas of the neuropythy atlas, grouped as in the analyses.
@@ -200,45 +226,64 @@ def render(ds, cx_subject, out_dir, stem, views, wait):
     procs = []
     webbrowser.open = lambda url, *a, **k: procs.append(headless_chrome(url)) or True
     handle = cortex.webgl.show(ds, open_browser=True, autoclose=False)
-    time.sleep(wait)
-    for view in views:
-        fn = (out_dir / f'{stem}_{view}.png').resolve()
-        if fn.exists():
-            print('exists', fn, flush=True)
-            continue
-        # Until the surface has loaded the viewer ignores the view, silently.
-        want = VIEWS[view]['camera.azimuth']
-        t0 = time.time()
-        while True:
-            try:
-                handle._set_view(**{**BASE_VIEW, **VIEWS[view]})
-            except (TypeError, IndexError, KeyError):   # UI not up yet
-                pass
+    try:   # headless Chrome must not outlive a failed render
+        time.sleep(wait)
+        for view in views:
+            fn = (out_dir / f'{stem}_{view}.png').resolve()
+            if fn.exists():
+                print('exists', fn, flush=True)
+                continue
+            # Until the surface has loaded the viewer ignores the view, silently.
+            want = VIEWS[view]['camera.azimuth']
+            t0 = time.time()
+            while True:
+                try:
+                    handle._set_view(**{**BASE_VIEW, **VIEWS[view]})
+                except (TypeError, IndexError, KeyError):   # UI not up yet
+                    pass
+                time.sleep(4)
+                try:
+                    got = handle.ui.get('camera.azimuth')[0]
+                    if abs((got - want + 180) % 360 - 180) < 1e-3:   # 0 may read back as 360
+                        break
+                except (TypeError, IndexError, KeyError):   # UI not up yet
+                    pass
+                if time.time() - t0 > 180:
+                    raise TimeoutError(f'{stem} {view}: viewer did not take the view')
             time.sleep(4)
-            try:
-                if abs(handle.ui.get('camera.azimuth')[0] - want) < 1e-3:
-                    break
-            except (TypeError, IndexError, KeyError):   # UI not up yet
-                pass
-            if time.time() - t0 > 180:
-                raise TimeoutError(f'{stem} {view}: viewer did not take the view')
-        time.sleep(4)
-        handle.getImage(str(fn), IMAGE_SIZE)
-        t0 = time.time()
-        while not fn.exists():
-            if time.time() - t0 > 300:
-                raise TimeoutError(fn)
-            time.sleep(1)
-        time.sleep(2)
-        print('wrote', fn, flush=True)
-    handle.server.stop()
-    for p in procs:
-        p.terminate()
+            handle.getImage(str(fn), IMAGE_SIZE)
+            t0 = time.time()
+            while not fn.exists():
+                if time.time() - t0 > 300:
+                    raise TimeoutError(fn)
+                time.sleep(1)
+            time.sleep(2)
+            print('wrote', fn, flush=True)
+    finally:
+        handle.server.stop()
+        for p in procs:
+            p.terminate()
 
 
-def main(subject, out_dir, views, pars, wait, r2_ramp=R2_RAMP, prf_dir=PRF_DIR):
+def write_settings(out_dir):
+    """Store the colour settings next to the renders (render_settings.json), so composing scripts draw
+    keys that match the baked colours; refuse to mix renders made with different settings in one folder."""
+    fn = out_dir / 'render_settings.json'
+    new = {'prf_dir': PRF_DIR, 'R2_RAMP': list(R2_RAMP), 'PANELS': {k: list(v) for k, v in PANELS.items()},
+           'ECC_MAX_SHOWN': ECC_MAX_SHOWN, 'CURV': CURV}
+    if fn.exists():
+        old = json.loads(fn.read_text())
+        if old != new:
+            raise ValueError(f'{fn} holds other colour settings ({old}); use another --out-dir')
+    else:
+        fn.write_text(json.dumps(new, indent=1))
+
+
+def main(subject, out_dir, views, pars, wait, r2_ramp=R2_RAMP, prf_dir=PRF_DIR, r2_max=None):
     global R2_RAMP, PRF_DIR
     R2_RAMP, PRF_DIR = tuple(r2_ramp), prf_dir
+    if r2_max is not None:
+        PANELS['r2'] = (PANELS['r2'][0], 0, r2_max)
     store = Path(cortex.database.default_filestore)
     cx_subject = f'valuecapturesub{subject:02d}'
     alias = store / cx_subject
@@ -247,8 +292,11 @@ def main(subject, out_dir, views, pars, wait, r2_ramp=R2_RAMP, prf_dir=PRF_DIR):
     alias.symlink_to(store / f'valuecapture.sub-{subject:02d}')
     try:
         cortex.db.reload_subjects()
+        has_flat = (store / cx_subject / 'surfaces' / 'flat_lh.gii').exists()
+        BASE_VIEW['surface.{subject}.unfold'] = .5 if has_flat else 1
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
+        write_settings(out_dir)
         border = border_mask(subject, cx_subject)
         for par in pars:
             if all((out_dir / f'sub-{subject:02d}_{par}_{v}.png').exists() for v in views):
@@ -270,7 +318,9 @@ if __name__ == '__main__':
     ap.add_argument('--pars', nargs='+', default=['areas'] + list(PANELS))
     ap.add_argument('--r2-ramp', nargs=2, type=float, default=R2_RAMP,
                     help='R² at which the colour starts to show and is fully opaque')
+    ap.add_argument('--r2-max', type=float, default=None,
+                    help=f'Top of the R² colour map (default {PANELS["r2"][2]})')
     ap.add_argument('--prf-dir', default=PRF_DIR, help='Fit folder under derivatives')
     ap.add_argument('--wait', type=float, default=45, help='Seconds for the viewer to load')
     a = ap.parse_args()
-    main(a.subject, a.out_dir, a.views, a.pars, a.wait, a.r2_ramp, a.prf_dir)
+    main(a.subject, a.out_dir, a.views, a.pars, a.wait, a.r2_ramp, a.prf_dir, a.r2_max)
