@@ -47,7 +47,8 @@ from nilearn import masking  # noqa: E402
 from value_capture.prf import fit_prf as fp  # noqa: E402
 from value_capture.utils.data import Subject  # noqa: E402
 
-ROIS = {'V1': (1,), 'V2': (2,), 'V3': (3,), 'hV4': (4,), 'LO': (7, 8), 'V3AB': (11, 12)}
+ROIS = {'V1': (1,), 'V2': (2,), 'V3': (3,), 'hV4': (4,), 'LO': (7, 8), 'V3AB': (11, 12), 'VO': (5, 6), 'TO': (9, 10),
+        'IPS': (101,)}
 GAIN_LABELS = ['target', 'distractor_low', 'distractor_high']
 COLOUR_GAIN_LABELS = ['target'] + [f'distractor_{c}_{v}' for c in ('green', 'orange') for v in ('low', 'high')]
 HIGH_COLOUR = {0: 'orange', 1: 'green'}          # value_condition -> colour of the high-value (rank 2) distractor
@@ -150,7 +151,7 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
     mask = fp._get_gm_mask(sub, sessions[0], bids, .1)
     Y_all = masking.apply_mask(sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv),
                                mask).astype(np.float32)
-    varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0]), mask))
+    varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0], include_wang=True), mask))
 
     # folds: (label, trial indices, PRF derivative)
     if cross_session:
@@ -242,13 +243,14 @@ if __name__ == '__main__':
     ap.add_argument('--free-prf', action='store_true', help='fit the PRFs together with the gain fields')
     ap.add_argument('--split-colour', action='store_true', help='distractor gains per colour x value')
     ap.add_argument('--min-ecc', type=float, default=0., help='only voxels with PRF eccentricity >= this (deg)')
+    ap.add_argument('--out-suffix', default='', help='appended to the output file name, e.g. _extra-rois')
     ap.add_argument('--separate-widths', action='store_true', help='one field (own width) per gain label')
     ap.add_argument('--tag', default='', help='suffix of the output folder, e.g. fbevents_subtract')
     a = ap.parse_args()
     folder = 'gain_fields' if a.prf_model == 'gauss' else f'gain_fields_{a.prf_model}'
     folder += f'_{a.tag}' if a.tag else ''
     out = a.out or (f'/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/{folder}/'
-                    f'sub-{a.subject}_gain_fields.tsv')
+                    f'sub-{a.subject}_gain_fields{a.out_suffix}.tsv')
     main(a.subject, a.rois, a.bids_folder, a.prf_deriv, a.glmsingle_deriv, a.min_r2, a.per_run, a.n_iter,
          a.learning_rate, out, prf_model=a.prf_model, cross_session=a.cross_session, points=a.points,
          free_prf=a.free_prf, split_colour=a.split_colour, min_ecc=a.min_ecc, separate_widths=a.separate_widths)

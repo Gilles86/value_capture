@@ -336,7 +336,7 @@ class Subject:
         return {1: 'V1', 2: 'V2', 3: 'V3', 4: 'hV4', 5: 'VO1', 6: 'VO2',
                 7: 'LO1', 8: 'LO2', 9: 'TO1', 10: 'TO2', 11: 'V3A', 12: 'V3B'}
 
-    def get_retinotopic_atlas(self, bold_space=False, session=1, run=1):
+    def get_retinotopic_atlas(self, bold_space=False, session=1, run=1, include_wang=False):
         """Load the neuropythy inferred_varea atlas (written by register_retinotopy.py).
 
         Parameters
@@ -344,11 +344,21 @@ class Subject:
         bold_space : bool
             If True, resample to functional resolution using the brain mask from
             ``session``/``run``.
+        include_wang : bool
+            Where neuropythy has no area, label Wang 2015 IPS0-5 as 101 and FEF as 102
+            (mri/wang15_mplbl.mgz from prf/wang_to_volume.py), as the surface figures do.
         """
         varea_file = op.join(self.freesurfer_subjects_dir, self.freesurfer_subject_id,
                              'mri', 'inferred_varea.mgz')
         varea_img = image.load_img(varea_file)
-        varea_img = nib.Nifti1Image(varea_img.get_fdata(), affine=varea_img.affine)
+        data = varea_img.get_fdata()
+        if include_wang:
+            wang = np.round(image.load_img(op.join(self.freesurfer_subjects_dir, self.freesurfer_subject_id,
+                                                   'mri', 'wang15_mplbl.mgz')).get_fdata())
+            data = data.copy()
+            data[(np.round(data) == 0) & np.isin(wang, (18, 19, 20, 21, 22, 23))] = 101
+            data[(np.round(data) == 0) & (wang == 25)] = 102
+        varea_img = nib.Nifti1Image(data, affine=varea_img.affine)
         if bold_space:
             ref = self.get_brain_mask(session, run)
             varea_img = image.resample_to_img(varea_img, ref,

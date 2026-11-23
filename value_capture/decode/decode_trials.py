@@ -33,7 +33,7 @@ from value_capture.prf import fit_prf as fp  # noqa: E402
 from value_capture.utils.data import Subject  # noqa: E402
 
 ROIS = {'V1': (1,), 'V2': (2,), 'V3': (3,), 'hV4': (4,), 'VO': (5, 6), 'LO': (7, 8), 'TO': (9, 10),
-        'V3AB': (11, 12)}
+        'V3AB': (11, 12), 'IPS': (101,)}
 DIAGONALS = (1, 3, 5, 7)
 DIST_BINS = ((0, 1.5), (1.5, 2.5), (2.5, 3.5), (3.5, 5), (5, 8))   # deg from the item centre (items at 4 deg)
 
@@ -146,7 +146,7 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
     mask_img = fp._get_gm_mask(sub, sessions[0], bids_folder, gm_threshold)
     Y = masking.apply_mask(betas, mask_img).astype(np.float32)
     assert Y.shape[1] == len(pars_all), (Y.shape, len(pars_all))
-    varea = masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0]), mask_img)
+    varea = masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0], include_wang=True), mask_img)
 
     grid = fp.make_grid_coordinates()
     paradigm = fp.build_paradigm(trials, 'bar_items')

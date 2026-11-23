@@ -43,7 +43,7 @@ def main(subject, bids, glmsingle_deriv, prf_deriv, radius, min_r2, out):
     mask = fp._get_gm_mask(sub, sessions[0], bids, .1)
     Y_all = masking.apply_mask(sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv),
                                mask).astype(np.float32)
-    varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0]), mask))
+    varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0], include_wang=True), mask))
     bar = (trials.bar_orientation.astype(str) + trials.bar_position.round(4).astype(str)).to_numpy()
     rows = []
     for s, o in zip(sessions, sessions[::-1]):
