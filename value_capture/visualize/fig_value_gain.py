@@ -7,7 +7,7 @@ much as at a neutral item.
 a, gain at the target, the low- and the high-value distractor per area (primary fit: DoG pRFs, points trials
    excluded). Dots, subjects (triangles beyond the axis); points and bars, median and bootstrapped 95% CI;
    p, Wilcoxon signed-rank against 0 per area, uncorrected.
-b, high - low value per area, same fit and statistics.
+b, high - low value per area, same fit; one-sided Wilcoxon (high > low).
 c, hV4 high - low in each of the six ways to fit it (Gaussian / DoG pRFs x points trials excluded, subtracted, or
    modelled as part of the stimulus) and averaged per subject over the six.
 
@@ -134,7 +134,7 @@ def panel_value(ax, d, ylim=(-120, 160)):
     for i, roi in enumerate(ROI_ORDER):
         v = d[d.roi == roi].high_low.dropna()
         dots(ax, ROI_X[roi], v, HIGH, lo, hi, seed=40 + i, jitter=.15, s=8)
-        p = stats.wilcoxon(v).pvalue
+        p = stats.wilcoxon(v, alternative='greater').pvalue
         ax.text(ROI_X[roi], hi + .04 * (hi - lo), f'{ptext(p)}\n{(v > 0).sum()}/{len(v)} > 0', ha='center',
                 va='bottom', fontsize=6, color=HIGH if p < .1 else FG, clip_on=False)
     ax.axhline(0, color='.6', lw=.8, ls='--', zorder=0)
@@ -155,7 +155,7 @@ def panel_fits(ax, t):
         m, a, b = median_ci(v)
         ax.plot([a, b], [yy, yy], color=HIGH, lw=1.6, solid_capstyle='butt')
         ax.plot(m, yy, 'D' if last else 'o', ms=5.5 if last else 4.5, color=HIGH, mec='w', mew=.6)
-        ax.text(1.04, yy, f'{(v > 0).sum()}/{len(v)}   {ptext(stats.wilcoxon(v).pvalue)}',
+        ax.text(1.04, yy, f'{(v > 0).sum()}/{len(v)}   {ptext(stats.wilcoxon(v, alternative="greater").pvalue)}',
                 transform=ax.get_yaxis_transform(), va='center', fontsize=6, color=FG)
     ax.text(1.04, y[0] + 1, '> 0', transform=ax.get_yaxis_transform(), va='center', fontsize=6, color=MUTED)
     ax.axvline(0, color='.6', lw=.8, ls='--', zorder=0)
