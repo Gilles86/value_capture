@@ -175,6 +175,8 @@ def gain_widths(folder='gain_fields_dog_fbevents_free_exclude_widths', fallback=
     shared = len(main) < 12
     if shared:
         folder = fallback
+        if not glob.glob(str(DATA / folder / 'sub-*_gain_fields.tsv')):
+            return None, None, True
     t = read_tsvs(DATA / folder / '*.tsv')
     t = t[t.scope == 'all'].set_index(['subject', 'roi'])
     amp = t[[f'field_gain_{k}' for k in ('target', 'distractor_low', 'distractor_high')]] * 100
@@ -279,7 +281,8 @@ def section(fig, y, text):
 
 
 VARIANTS = {'exclude': dict(decoded='fbevents_dog_none', title='only trials without the points display'),
-            'subtract': dict(decoded='fbevents_dog_regress', title='all trials, points response subtracted')}
+            'subtract': dict(decoded='fbevents_dog_regress', title='all trials, points response subtracted'),
+            'keep': dict(decoded='fbevents_dog_all', title='all trials, nothing removed (points response included)')}
 
 
 PANELS = [  # key, data, y label, icon, heading, extra panel_triplet kwargs
@@ -319,6 +322,12 @@ def main(points='exclude'):
     for (k, key, ylabel, kind, head, kw), top in zip(PANELS, tops):
         ax = fig.add_axes([X, top - H, W, H])
         d = data[key]
+        if d is None:
+            ax.set_axis_off()
+            ax.text(.5, .5, 'Pending: gain-field fits still running', transform=ax.transAxes, ha='center',
+                    va='center', fontsize=7, color=MUTED)
+            heading(fig, .012, top + .045, k, [head[0]])
+            continue
         panel_triplet(ax, d, ylabel, **kw)
         n = with_pooled(d.dropna(how='all')).reset_index().groupby('roi').subject.nunique().to_dict()
         pooled_axis(ax, n)
