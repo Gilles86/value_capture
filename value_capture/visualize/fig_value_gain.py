@@ -1,56 +1,55 @@
-"""Figure: hV4 amplifies the colour-singleton distractor, more so when it signals high value.
+"""Figure: gain at the target and at the low- and high-value distractor per visual area (style of retsupp Fig. 5).
 
-Gain fields fitted jointly with the PRFs on the primary betas (glmsingle_fbevents), all sessions together
-(`gainfield/fit_gain_fields.py --free-prf`). A gain of 0.5 means the response to the stimulus at that item's
-location is 1.5x that at a neutral item.
+Gain fields fitted jointly with the pRFs on the primary betas (glmsingle_fbevents), all sessions together
+(`gainfield/fit_gain_fields.py --free-prf`). Gain in %: +50% = the stimulus at that item drives the voxels 1.5x as
+much as at a neutral item.
 
-a, gain at the target, the low-value and the high-value distractor along the visual hierarchy (primary fit: DoG
-PRFs, points trials excluded; mean +- SEM over subjects).
-b, hV4, every subject: gain at the low- and the high-value distractor (primary fit).
-c, hV4 high - low value in each of the six ways to fit it (Gaussian / DoG PRFs x points subtracted, excluded or
-modelled as part of the stimulus), and averaged per subject over the six (mean, 95% bootstrap CI; exact
-sign-flip p; subjects with high > low).
+a, gain at the target, the low- and the high-value distractor per area (primary fit: DoG pRFs, points trials
+   excluded). Dots, subjects (triangles beyond the axis); points and bars, median and bootstrapped 95% CI;
+   p, Wilcoxon signed-rank against 0 per area, uncorrected.
+b, high - low value per area, same fit and statistics.
+c, hV4 high - low in each of the six ways to fit it (Gaussian / DoG pRFs x points trials excluded, subtracted, or
+   modelled as part of the stimulus) and averaged per subject over the six.
 
     python value_capture/visualize/fig_value_gain.py
 """
 import glob
-import itertools
 from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.transforms as mtrans
 import numpy as np
 import pandas as pd
-import seaborn as sns
+from scipy import stats
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / 'notes' / 'data'
+OUT = ROOT / 'notes' / 'figures'
 mpl.rcParams.update({
-    'font.family': 'Helvetica', 'font.size': 7, 'axes.labelsize': 7.5, 'axes.titlesize': 7.5,
-    'xtick.labelsize': 7, 'ytick.labelsize': 7, 'axes.linewidth': .8, 'axes.spines.top': False,
-    'axes.spines.right': False, 'xtick.direction': 'out', 'ytick.direction': 'out', 'xtick.major.size': 3,
-    'ytick.major.size': 3, 'xtick.major.width': .8, 'ytick.major.width': .8, 'pdf.fonttype': 42,
-    'savefig.dpi': 300, 'savefig.bbox': 'tight', 'savefig.pad_inches': .02})
+    'font.family': 'Helvetica', 'font.size': 7, 'axes.labelsize': 8, 'axes.titlesize': 8,
+    'xtick.labelsize': 7, 'ytick.labelsize': 7, 'axes.linewidth': .8,
+    'axes.spines.top': False, 'axes.spines.right': False, 'axes.labelpad': 3,
+    'xtick.direction': 'out', 'ytick.direction': 'out', 'xtick.major.size': 3, 'ytick.major.size': 3,
+    'xtick.major.width': .8, 'ytick.major.width': .8, 'lines.linewidth': 1.2,
+    'pdf.fonttype': 42, 'ps.fonttype': 42, 'savefig.pad_inches': .02})
+
+DOUBLE = 180 / 25.4
 FG, MUTED = '#1F2933', '#9AA5B1'
-COL = {'target': '#F77F00', 'low': '#009E73', 'high': '#7B3294'}
-ROIS = ['V1', 'V2', 'V3', 'hV4', 'LO']
+TARGET, LOW, HIGH = '#F77F00', '#009E73', '#7B3294'
+ROI_GROUPS = [('Early', ('V1', 'V2', 'V3')), ('Dorsal', ('V3AB',)), ('Occipitotemporal', ('hV4', 'LO'))]
+GROUP_GAP = 1.
+ROI_ORDER = [r for _, g in ROI_GROUPS for r in g]
+ROI_X, _x = {}, 0.
+for _, _g in ROI_GROUPS:
+    for _r in _g:
+        ROI_X[_r] = _x
+        _x += 1
+    _x += GROUP_GAP
 FITS = [('dog', 'exclude'), ('dog', 'subtract'), ('dog', 'model'),
         ('gauss', 'exclude'), ('gauss', 'subtract'), ('gauss', 'model')]
 PRIMARY = ('dog', 'exclude')
-FIT_LABEL = {'exclude': 'points excluded', 'subtract': 'points subtracted', 'model': 'points modelled'}
-
-
-def signflip(x):
-    x = np.asarray(x, float)
-    x = x[np.isfinite(x)]
-    s = np.array(list(itertools.product([-1, 1], repeat=len(x))))
-    return (np.abs((s * x).mean(1)) >= abs(x.mean()) - 1e-12).mean()
-
-
-def boot_ci(x, n=20000, seed=0):
-    x = np.asarray(x, float)
-    m = np.random.default_rng(seed).choice(x, (n, len(x))).mean(1)
-    return np.percentile(m, [2.5, 97.5])
+POINTS = {'exclude': 'points trials excluded', 'subtract': 'points subtracted', 'model': 'points modelled'}
 
 
 def load():
@@ -59,102 +58,148 @@ def load():
         d = DATA / f"gain_fields{'_dog' if prf == 'dog' else ''}_fbevents_free_{points}"
         t = pd.concat([pd.read_csv(f, sep='\t', dtype={'subject': str}) for f in glob.glob(f'{d}/*.tsv')])
         out.append(t[t.scope == 'all'].assign(prf=prf, points=points))
-    t = pd.concat(out)
-    t = t.rename(columns={'field_gain_target': 'target', 'field_gain_distractor_low': 'low',
-                          'field_gain_distractor_high': 'high'})
+    t = pd.concat(out).rename(columns={'field_gain_target': 'target', 'field_gain_distractor_low': 'low',
+                                       'field_gain_distractor_high': 'high'})
+    for c in ('target', 'low', 'high'):
+        t[c] *= 100
     t['high_low'] = t.high - t.low
-    return t[['prf', 'points', 'subject', 'roi', 'n_voxels', 'target', 'low', 'high', 'high_low']]
+    return t
 
 
-def panel_profile(ax, t):
-    d = t[(t.prf == PRIMARY[0]) & (t.points == PRIMARY[1]) & t.roi.isin(ROIS)]
-    x = np.arange(len(ROIS))
-    for k, (c, dx) in enumerate([('target', -.2), ('low', 0), ('high', .2)]):
-        g = d.groupby('roi')[c]
-        m, se = g.mean().reindex(ROIS), (g.std() / np.sqrt(g.count())).reindex(ROIS)
-        ax.plot(x + dx, m, '-', color=COL[c], lw=1, alpha=.5, zorder=2)
-        ax.errorbar(x + dx, m, se, fmt='o', ms=3.6, color=COL[c], mec='w', mew=.4, elinewidth=1, capsize=0,
-                    zorder=3)
-    ax.axhline(0, color=MUTED, lw=.6, ls=(0, (2, 2)), zorder=1)
-    ax.axvspan(2.55, 3.45, color='#EEF0F2', lw=0, zorder=0)
-    ax.set_xticks(x, ROIS)
-    ax.set_xlim(-.5, len(ROIS) - .5)
-    ax.set_ylabel('Gain at item (vs. neutral item)')
-    for i, (lab, c) in enumerate([('Target', 'target'), ('Low-value distractor', 'low'),
-                                  ('High-value distractor', 'high')]):
-        ax.plot(.04, .95 - i * .085, 'o', ms=3.6, color=COL[c], mec='w', mew=.4, transform=ax.transAxes,
-                clip_on=False)
-        ax.text(.08, .95 - i * .085, lab, color=COL[c], fontsize=6.5, va='center', transform=ax.transAxes)
-    ax.text(3, ax.get_ylim()[0] + .03, 'Colour\narea', ha='center', va='bottom', fontsize=6.5, color=FG)
+def median_ci(x, n_boot=5000, seed=0):
+    x = np.asarray(x)[np.isfinite(x)]
+    boots = np.median(np.random.default_rng(seed).choice(x, (n_boot, len(x))), axis=1)
+    return np.median(x), *np.percentile(boots, [2.5, 97.5])
 
 
-def panel_subjects(ax, t):
-    d = t[(t.prf == PRIMARY[0]) & (t.points == PRIMARY[1]) & (t.roi == 'hV4')].set_index('subject')
-    up = d.high > d.low
-    for s, r in d.iterrows():
-        ax.plot([0, 1], [r.low, r.high], '-', color=COL['high'] if up[s] else MUTED, lw=.8,
-                alpha=.8 if up[s] else .6, zorder=1)
-    rng = np.random.default_rng(1)
-    for i, c in enumerate(['low', 'high']):
-        ax.scatter(np.full(len(d), i) + rng.uniform(-.04, .04, len(d)), d[c], s=9, color=COL[c],
-                   edgecolor='w', lw=.3, zorder=2)
-        ax.errorbar(i + (-.22 if i == 0 else .22), d[c].mean(), d[c].std() / np.sqrt(len(d)), fmt='o', ms=4.5,
-                    color=COL[c], elinewidth=1.2, capsize=0, zorder=3)
-    ax.set_xticks([0, 1], ['Low\nvalue', 'High\nvalue'])
-    for lab, c in zip(ax.get_xticklabels(), ['low', 'high']):
-        lab.set_color(COL[c])
-    ax.set_xlim(-.45, 1.45)
-    ax.axhline(0, color=MUTED, lw=.6, ls=(0, (2, 2)), zorder=0)
-    ax.set_ylabel('hV4 gain at distractor')
-    hl = d.high - d.low
-    ax.set_title(f'{up.sum()} of {len(d)} subjects:\nhigh > low', fontsize=7, color=FG, pad=6)
+def ptext(p):
+    if p < .001:
+        return 'p < .001'
+    return (f'p = {p:.3f}' if p < .01 else f'p = {p:.2f}').replace('0.', '.')
 
 
-def panel_multiverse(ax, t):
+def offset_spines(ax, by=3):
+    ax.spines['left'].set_position(('outward', by))
+    ax.spines['bottom'].set_position(('outward', by))
+
+
+def roi_axis(ax, n_per_roi, pad_pt=3):
+    xs = [ROI_X[r] for r in ROI_ORDER]
+    ax.set_xticks(xs, [r if n_per_roi[r] >= 11 else f'{r}\n(n = {n_per_roi[r]})' for r in ROI_ORDER], fontsize=7)
+    ax.set_xlim(xs[0] - .6, xs[-1] + .6)
+    fig = ax.figure
+    fig.canvas.draw()
+    inv = ax.transAxes.inverted()
+    bottom = min(inv.transform((0, t.get_window_extent().y0))[1] for t in ax.get_xticklabels() if t.get_text())
+    tr = mtrans.blended_transform_factory(ax.transData, ax.transAxes)
+    for name, rois in ROI_GROUPS:
+        x0, x1 = ROI_X[rois[0]] - .38, ROI_X[rois[-1]] + .38
+        ax.plot([x0, x1], [bottom] * 2, transform=mtrans.offset_copy(tr, fig=fig, y=-pad_pt, units='points'),
+                color=MUTED, lw=.7, clip_on=False, solid_capstyle='butt')
+        ax.text((x0 + x1) / 2, bottom, name, transform=mtrans.offset_copy(tr, fig=fig, y=-pad_pt - 1.5, units='points'),
+                ha='center', va='top', fontsize=6.5, color='.4', clip_on=False)
+
+
+def dots(ax, x, v, col, lo, hi, seed, jitter=.07, s=6):
+    v = np.asarray(v, float)
+    xx = x + np.random.default_rng(seed).uniform(-jitter, jitter, len(v))
+    ok = (v >= lo) & (v <= hi)
+    ax.scatter(xx[ok], v[ok], s=s, color=col, alpha=.35, lw=0, zorder=1)
+    ax.scatter(xx[v > hi], np.full((v > hi).sum(), hi), s=9, marker='^', color=col, alpha=.6, lw=0, clip_on=False)
+    ax.scatter(xx[v < lo], np.full((v < lo).sum(), lo), s=9, marker='v', color=col, alpha=.6, lw=0, clip_on=False)
+    m, a, b = median_ci(v, seed=seed)
+    ax.errorbar(x, m, yerr=[[m - a], [b - m]], fmt='o', ms=5, color=col, mec='w', mew=.7, lw=1.5, capsize=0, zorder=4)
+
+
+def panel_gains(ax, d, ylim=(-60, 220)):
+    lo, hi = ylim
+    terms = [('target', TARGET, -.27), ('low', LOW, 0.), ('high', HIGH, .27)]
+    for k, (term, col, dx) in enumerate(terms):
+        for i, roi in enumerate(ROI_ORDER):
+            v = d[d.roi == roi][term].dropna()
+            dots(ax, ROI_X[roi] + dx, v, col, lo, hi, seed=10 * k + i)
+            p = stats.wilcoxon(v).pvalue
+            ax.text(ROI_X[roi] + dx, hi + .04 * (hi - lo), ptext(p)[4:].replace('< ', '<'), ha='center',
+                    va='bottom', fontsize=5.5, color=col if p < .05 else MUTED, clip_on=False)
+    ax.text(ROI_X[ROI_ORDER[0]] - .6, hi + .04 * (hi - lo), 'p:', fontsize=5.5, color=FG, ha='right', va='bottom',
+            clip_on=False)
+    ax.axhline(0, color='.6', lw=.8, ls='--', zorder=0)
+    ax.set_ylim(lo, hi)
+    ax.set_ylabel('Gain at item (%)')
+    offset_spines(ax)
+
+
+def panel_value(ax, d, ylim=(-120, 160)):
+    lo, hi = ylim
+    for i, roi in enumerate(ROI_ORDER):
+        v = d[d.roi == roi].high_low.dropna()
+        dots(ax, ROI_X[roi], v, HIGH, lo, hi, seed=40 + i, jitter=.15, s=8)
+        p = stats.wilcoxon(v).pvalue
+        ax.text(ROI_X[roi], hi + .04 * (hi - lo), f'{ptext(p)}\n{(v > 0).sum()}/{len(v)} > 0', ha='center',
+                va='bottom', fontsize=6, color=HIGH if p < .1 else FG, clip_on=False)
+    ax.axhline(0, color='.6', lw=.8, ls='--', zorder=0)
+    ax.set_ylim(lo, hi)
+    ax.set_ylabel('High − low value (%)')
+    offset_spines(ax)
+
+
+def panel_fits(ax, t):
     d = t[t.roi == 'hV4']
-    rows = []
-    for prf, points in FITS:
-        v = d[(d.prf == prf) & (d.points == points)].set_index('subject').high_low
-        rows.append((f"{'DoG' if prf == 'dog' else 'Gaussian'}, {FIT_LABEL[points]}", v))
-    avg = d.groupby('subject').high_low.mean()
-    rows.append(('Average over the six', avg))
+    rows = [(f"{'DoG' if prf == 'dog' else 'Gaussian'}, {POINTS[points]}",
+             d[(d.prf == prf) & (d.points == points)].set_index('subject').high_low) for prf, points in FITS]
+    rows.append(('Average of the six', d.groupby('subject').high_low.mean()))
     y = np.arange(len(rows))[::-1].astype(float)
-    y[-1] -= .5
+    y[-1] -= .6
     for (lab, v), yy in zip(rows, y):
         last = lab.startswith('Average')
-        lo, hi = boot_ci(v)
-        col = COL['high']
-        ax.plot([lo, hi], [yy, yy], color=col, lw=1.6 if last else 1.1, solid_capstyle='butt')
-        ax.plot(v.mean(), yy, 'D' if last else 'o', ms=5 if last else 3.8, color=col, mec='w', mew=.4)
-        ax.text(1.02, yy, f'{(v > 0).sum()}/{len(v)}   p = {signflip(v):.2f}'.replace('0.', '.'),
-                transform=ax.get_yaxis_transform(), va='center', fontsize=6.5, color=FG)
-    ax.axvline(0, color=MUTED, lw=.6, ls=(0, (2, 2)))
-    ax.set_yticks(y, [r[0] for r in rows])
+        m, a, b = median_ci(v)
+        ax.plot([a, b], [yy, yy], color=HIGH, lw=1.6, solid_capstyle='butt')
+        ax.plot(m, yy, 'D' if last else 'o', ms=5.5 if last else 4.5, color=HIGH, mec='w', mew=.6)
+        ax.text(1.04, yy, f'{(v > 0).sum()}/{len(v)}   {ptext(stats.wilcoxon(v).pvalue)}',
+                transform=ax.get_yaxis_transform(), va='center', fontsize=6, color=FG)
+    ax.text(1.04, y[0] + 1, '> 0', transform=ax.get_yaxis_transform(), va='center', fontsize=6, color=MUTED)
+    ax.axvline(0, color='.6', lw=.8, ls='--', zorder=0)
+    ax.set_yticks(y, [r[0] for r in rows], fontsize=6.5)
     ax.tick_params(axis='y', length=0)
     ax.spines['left'].set_visible(False)
-    ax.set_xlabel('hV4 gain, high − low value')
-    ax.text(1.02, y[0] + .9, 'High > low', transform=ax.get_yaxis_transform(), fontsize=6.5, color=MUTED,
-            va='center')
-    ax.set_ylim(y[-1] - .7, y[0] + 1.2)
+    ax.spines['bottom'].set_position(('outward', 3))
+    ax.set_ylim(y[-1] - .7, y[0] + 1.4)
+    ax.set_xlabel('hV4, high − low value (%)')
+
+
+def heading(fig, x, y, letter, parts):
+    fig.text(x, y, letter, fontsize=8, fontweight='bold', va='bottom')
+    r = fig.canvas.get_renderer()
+    x += .022
+    for s, c in parts:
+        tx = fig.text(x, y, s, fontsize=8, color=c, va='bottom')
+        x += tx.get_window_extent(r).width / fig.bbox.width
 
 
 def main():
     t = load()
-    fig = plt.figure(figsize=(7.25, 2.6))
-    axes = [fig.add_axes(r) for r in ([.07, .17, .3, .68], [.45, .17, .13, .68], [.83, .17, .12, .68])]
-    panel_profile(axes[0], t)
-    panel_subjects(axes[1], t)
-    panel_multiverse(axes[2], t)
-    for ax in axes[:2]:
-        sns.despine(ax=ax, offset=4, trim=False)
-    sns.despine(ax=axes[2], offset=4, left=True)
-    for ax, l in zip(axes, 'abc'):
-        ax.text({'a': -.2, 'b': -.5, 'c': -1.95}[l], 1.12, l, transform=ax.transAxes, fontsize=9, fontweight='bold', ha='right', va='bottom')
-    out = ROOT / 'notes' / 'figures' / 'fig_value_gain.pdf'
-    out.parent.mkdir(exist_ok=True)
-    fig.savefig(out)
-    fig.savefig(out.with_suffix('.png'), dpi=200)
-    print(out)
+    d = t[(t.prf == PRIMARY[0]) & (t.points == PRIMARY[1])]
+    n_per_roi = d.groupby('roi').subject.nunique().to_dict()
+    fig = plt.figure(figsize=(DOUBLE, 5.6))
+    ax_a = fig.add_axes([.075, .64, .9, .27])
+    ax_b = fig.add_axes([.075, .12, .42, .26])
+    ax_c = fig.add_axes([.775, .12, .13, .26])
+    panel_gains(ax_a, d)
+    roi_axis(ax_a, n_per_roi)
+    panel_value(ax_b, d)
+    roi_axis(ax_b, n_per_roi)
+    panel_fits(ax_c, t)
+    hv4 = d[d.roi == 'hV4']
+    heading(fig, .01, .955, 'a', [('Gain at the ', FG), ('target', TARGET), (', the ', FG), ('low-value', LOW),
+                                  (' and the ', FG), ('high-value', HIGH), (' distractor', FG)])
+    heading(fig, .01, .455, 'b', [('More gain for the ', FG), ('high-value', HIGH),
+                                (f' distractor in hV4 ({(hv4.high_low > 0).sum()} of {len(hv4)} subjects)', FG)])
+    heading(fig, .54, .455, 'c', [('hV4: ', FG), ('high', HIGH), (' > ', FG), ('low', LOW),
+                                (' in all six ways to fit it', FG)])
+    OUT.mkdir(exist_ok=True)
+    fig.savefig(OUT / 'fig_value_gain.pdf', dpi=300)
+    fig.savefig(OUT / 'fig_value_gain.png', dpi=200)
+    print(OUT / 'fig_value_gain.pdf')
 
 
 if __name__ == '__main__':
