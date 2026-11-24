@@ -101,8 +101,9 @@ if __name__ == '__main__':
     ap.add_argument('--min-r2', type=float, default=.1)
     ap.add_argument('--max-points-overlap', type=float, default=None,
                     help='only voxels whose pRF covers less than this fraction of the points text')
+    ap.add_argument('--tag', default='', help='suffix of the output folder')
     ap.add_argument('--out', default=None)
     a = ap.parse_args()
-    out = a.out or (f'/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/item_location_responses/'
+    out = a.out or (f'/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/item_location_responses{"_" + a.tag if a.tag else ""}/'
                     f'sub-{a.subject}_item_location_responses.tsv')
     main(a.subject, a.bids_folder, a.glmsingle_deriv, a.prf_deriv, a.radius, a.min_r2, out, a.max_points_overlap)
