@@ -29,26 +29,12 @@ from value_capture.prf import fit_prf as fp
 from value_capture.utils.data import Subject
 
 
-def ink_map(trials, grid):
-    """Mean ink of the shown points texts on ``grid`` (n_pixels,), 0 outside the points patch."""
-    patch = pts.patch_coordinates(grid)
-    xs, ys = np.sort(patch.x.unique()), np.sort(patch.y.unique())
-    key = (tuple(np.round(xs, 6)), tuple(np.round(ys, 6)), round(float(np.diff(xs).mean()), 6))
-    shown = trials[trials.show_feedback.astype(bool)]
-    img = np.mean([pts._render(pts.points_text(r), key) for r in shown.itertuples()], 0)
-    out = np.zeros(len(grid), np.float32)
-    inside = (grid.x.abs() <= pts.PATCH['x']) & (grid.y.abs() <= pts.PATCH['y'])
-    # patch_coordinates keeps grid order, so the patch pixels map back in order
-    out[np.flatnonzero(inside.to_numpy())] = img
-    return out
-
-
 def main(subject, bids, glmsingle_deriv, prf_deriv, min_r2, out):
     sub = Subject(subject, bids_folder=bids)
     sessions = sub.get_sessions()
     trials = pts.add_points_info(sub, trial_table(sub, sessions, glmsingle_deriv))
     grid = fp.make_grid_coordinates()
-    ink = ink_map(trials, grid)
+    ink = pts.ink_map(trials, grid)
     mask = fp._get_gm_mask(sub, sessions[0], bids, .1)
     varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0],
                                                                   include_wang=True), mask))

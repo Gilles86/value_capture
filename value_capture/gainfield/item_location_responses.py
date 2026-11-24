@@ -35,11 +35,15 @@ def roles(trials, loc):
     return r
 
 
-def main(subject, bids, glmsingle_deriv, prf_deriv, radius, min_r2, out):
+def main(subject, bids, glmsingle_deriv, prf_deriv, radius, min_r2, out, max_points_overlap=None):
     sub = Subject(subject, bids_folder=bids)
     sessions = sub.get_sessions()
     assert len(sessions) == 2, sessions
     trials = trial_table(sub, sessions, glmsingle_deriv)
+    if max_points_overlap is not None:
+        from value_capture.gainfield import points as pts
+        trials = pts.add_points_info(sub, trials)
+        ink = pts.ink_map(trials, fp.make_grid_coordinates())
     mask = fp._get_gm_mask(sub, sessions[0], bids, .1)
     Y_all = masking.apply_mask(sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv),
                                mask).astype(np.float32)
@@ -61,6 +65,11 @@ def main(subject, bids, glmsingle_deriv, prf_deriv, radius, min_r2, out):
             keep = ~shown if points == 'exclude' else np.ones(len(tr), bool)
             for roi, labels in ROIS.items():
                 inroi = np.isin(varea, labels) & (pars.r2.to_numpy() >= min_r2)
+                if max_points_overlap is not None:
+                    ok = np.flatnonzero(inroi)
+                    ovl = pts.text_overlap(ink, fp.make_grid_coordinates(), pars.x.to_numpy()[ok],
+                                           pars.y.to_numpy()[ok], pars.sd.to_numpy()[ok])
+                    inroi[ok[ovl >= max_points_overlap]] = False
                 for loc in DIAGONALS:
                     cx, cy = fp.ITEM_XY[loc]
                     sel = inroi & (np.hypot(pars.x.to_numpy() - cx, pars.y.to_numpy() - cy) < radius)
@@ -90,8 +99,10 @@ if __name__ == '__main__':
     ap.add_argument('--prf-deriv', default='prf_glmsingle_fbevents_items')
     ap.add_argument('--radius', type=float, default=2.)
     ap.add_argument('--min-r2', type=float, default=.1)
+    ap.add_argument('--max-points-overlap', type=float, default=None,
+                    help='only voxels whose pRF covers less than this fraction of the points text')
     ap.add_argument('--out', default=None)
     a = ap.parse_args()
     out = a.out or (f'/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/item_location_responses/'
                     f'sub-{a.subject}_item_location_responses.tsv')
-    main(a.subject, a.bids_folder, a.glmsingle_deriv, a.prf_deriv, a.radius, a.min_r2, out)
+    main(a.subject, a.bids_folder, a.glmsingle_deriv, a.prf_deriv, a.radius, a.min_r2, out, a.max_points_overlap)

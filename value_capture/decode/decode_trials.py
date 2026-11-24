@@ -113,7 +113,7 @@ def readout(decoded, paradigm, trials, imasks, grid):
 
 def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders, l2_norm, learning_rate,
          max_iter, min_iter, out_root, gm_threshold=.1, resid_max_iter=2000, glmsingle_deriv='glmsingle_fbreg',
-         model_kind='gauss', prf_deriv='prf_glmsingle_items'):
+         model_kind='gauss', prf_deriv='prf_glmsingle_items', max_points_overlap=None):
     from braincoder.models import (DifferenceOfGaussiansPRF2D, DivisiveNormalizationGaussianPRF2D,
                                    GaussianPRF2D)
     from braincoder.optimize import ResidualFitter, StimulusFitter
@@ -159,6 +159,16 @@ def main(subject, test_session, rois, bids_folder, max_voxels, min_r2, decoders,
         sel = np.flatnonzero(np.isin(np.round(varea), ROIS[roi]) & (pars_all.r2.to_numpy() >= min_r2)
                              & np.isfinite(pars_all.r2.to_numpy())
                              & np.isfinite(pars_model[model_class.parameter_labels].to_numpy()).all(1))
+        if max_points_overlap is not None:
+            from value_capture.gainfield import points as pts
+            if 'ink' not in locals():
+                ink = pts.ink_map(pts.add_points_info(sub, trials.astype({'session': int, 'run': int}).merge(
+                    sub.get_behavioral_data(exclude_outlier_rts=False).reset_index()[
+                        ['session', 'run', 'trial_nr', 'show_feedback']].astype({'session': int, 'run': int}),
+                    on=['session', 'run', 'trial_nr'], how='left')), grid)
+            ovl = pts.text_overlap(ink, grid, pars_all.x.to_numpy()[sel], pars_all.y.to_numpy()[sel],
+                                   pars_all.sd.to_numpy()[sel])
+            sel = sel[ovl < max_points_overlap]
         if len(sel) > max_voxels:
             sel = sel[np.argsort(-pars_all.r2.to_numpy()[sel])[:max_voxels]]
         if len(sel) < 20:
@@ -220,9 +230,11 @@ if __name__ == '__main__':
                     help='PRF derivative, without _train-ses<N>; use the PRFs fitted on the same betas when possible')
     ap.add_argument('--model', choices=['gauss', 'dog', 'dn'], default='gauss',
                     help='encoding model; dog / dn write to <out-root>_<model> (voxels still selected on the Gaussian fit)')
+    ap.add_argument('--max-points-overlap', type=float, default=None,
+                    help='only voxels whose pRF covers less than this fraction of the points text')
     ap.add_argument('--out-root', default='/shares/zne.uzh/gdehol/ds-valuecapture/derivatives/decoded_trials')
     a = ap.parse_args()
     out_root = a.out_root if a.model == 'gauss' else f'{a.out_root}_{a.model}'
     main(a.subject, a.test_session, a.rois, a.bids_folder, a.max_voxels, a.min_r2, a.decoders, a.l2_norm,
          a.learning_rate, a.max_iter, a.min_iter, out_root, glmsingle_deriv=a.glmsingle_deriv, model_kind=a.model,
-         prf_deriv=a.prf_deriv)
+         prf_deriv=a.prf_deriv, max_points_overlap=a.max_points_overlap)

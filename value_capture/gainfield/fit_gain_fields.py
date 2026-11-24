@@ -97,7 +97,8 @@ def r2(y, yhat):
 
 
 def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out, prf_model='gauss',
-         cross_session=False, points='keep', free_prf=False, split_colour=False, min_ecc=0., separate_widths=False):
+         cross_session=False, points='keep', free_prf=False, split_colour=False, min_ecc=0., separate_widths=False,
+         max_points_overlap=None):
     from braincoder.models import GainFieldDoGPRF2D, GainFieldPRF2D
     from braincoder.models.gain_field import GainField
     from braincoder.optimize import ParameterFitter
@@ -177,6 +178,12 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
             ecc = np.hypot(pars_all.x.to_numpy(), pars_all.y.to_numpy())
             sel = np.flatnonzero(np.isin(varea, ROIS[roi]) & (pars_all.r2.to_numpy() >= min_r2) & (ecc >= min_ecc)
                                  & np.isfinite(pars_model[prf_labels].to_numpy()).all(1))
+            if max_points_overlap is not None:
+                from value_capture.gainfield import points as pts
+                ink = pts.ink_map(pts.add_points_info(sub, tr), fp.make_grid_coordinates())
+                ovl = pts.text_overlap(ink, fp.make_grid_coordinates(), pars_all.x.to_numpy()[sel],
+                                       pars_all.y.to_numpy()[sel], pars_all.sd.to_numpy()[sel])
+                sel = sel[ovl < max_points_overlap]
             if len(sel) < 10:
                 print(f'{scope} {roi}: {len(sel)} voxels, skipped', flush=True)
                 continue
@@ -243,6 +250,8 @@ if __name__ == '__main__':
     ap.add_argument('--free-prf', action='store_true', help='fit the PRFs together with the gain fields')
     ap.add_argument('--split-colour', action='store_true', help='distractor gains per colour x value')
     ap.add_argument('--min-ecc', type=float, default=0., help='only voxels with PRF eccentricity >= this (deg)')
+    ap.add_argument('--max-points-overlap', type=float, default=None,
+                    help='only voxels whose pRF covers less than this fraction of the points text')
     ap.add_argument('--out-suffix', default='', help='appended to the output file name, e.g. _extra-rois')
     ap.add_argument('--separate-widths', action='store_true', help='one field (own width) per gain label')
     ap.add_argument('--tag', default='', help='suffix of the output folder, e.g. fbevents_subtract')
@@ -253,4 +262,5 @@ if __name__ == '__main__':
                     f'sub-{a.subject}_gain_fields{a.out_suffix}.tsv')
     main(a.subject, a.rois, a.bids_folder, a.prf_deriv, a.glmsingle_deriv, a.min_r2, a.per_run, a.n_iter,
          a.learning_rate, out, prf_model=a.prf_model, cross_session=a.cross_session, points=a.points,
-         free_prf=a.free_prf, split_colour=a.split_colour, min_ecc=a.min_ecc, separate_widths=a.separate_widths)
+         free_prf=a.free_prf, split_colour=a.split_colour, min_ecc=a.min_ecc, separate_widths=a.separate_widths,
+         max_points_overlap=a.max_points_overlap)

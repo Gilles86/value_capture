@@ -97,3 +97,30 @@ def add_points_info(sub, trials):
                   how='left', validate='one_to_one'))
     assert out.delay[out.show_feedback.astype(bool)].notna().all()
     return out
+
+
+def ink_map(trials, grid):
+    """Mean ink of the points texts shown to this subject on ``grid`` (n_pixels,), 0 outside the points patch.
+    ``trials`` needs show_feedback, correct and earned_points (``add_points_info``)."""
+    patch = patch_coordinates(grid)
+    xs, ys = np.sort(patch.x.unique()), np.sort(patch.y.unique())
+    key = (tuple(np.round(xs, 6)), tuple(np.round(ys, 6)), round(float(np.diff(xs).mean()), 6))
+    shown = trials[trials.show_feedback.astype(bool)]
+    img = np.mean([_render(points_text(r), key) for r in shown.itertuples()], 0)
+    out = np.zeros(len(grid), np.float32)
+    inside = (grid.x.abs() <= PATCH['x']) & (grid.y.abs() <= PATCH['y'])
+    out[np.flatnonzero(inside.to_numpy())] = img
+    return out
+
+
+def text_overlap(ink, grid, x, y, sd):
+    """Fraction of each Gaussian pRF (x, y, sd arrays) that falls on the points ink (``ink_map``).
+    Voxels below ~.003 carry no timing-dependent points leak (check_points_leak_overlap.py)."""
+    gx, gy = grid.x.to_numpy()[None], grid.y.to_numpy()[None]
+    out = np.empty(len(x), np.float32)
+    for i in range(0, len(x), 2000):
+        sl = slice(i, i + 2000)
+        rf = np.exp(-((gx - np.asarray(x)[sl, None]) ** 2 + (gy - np.asarray(y)[sl, None]) ** 2)
+                    / (2 * np.asarray(sd)[sl, None] ** 2))
+        out[sl] = (rf * ink[None]).sum(1) / rf.sum(1)
+    return out
