@@ -46,7 +46,7 @@ def contrasts_for(design):
 SPACE = 'space-MNI152NLin2009cAsym_res-2'
 
 
-def reward_rois(ref):
+def reward_rois(ref, roi_set='reward'):
     sub = datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
     cort = datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
     sub_img, cort_img = (image.resample_to_img(a.maps, ref, interpolation='nearest', force_resample=True,
@@ -57,6 +57,13 @@ def reward_rois(ref):
             'caudate': (s, lab(sub.labels, ['Left Caudate', 'Right Caudate'])),
             'putamen': (s, lab(sub.labels, ['Left Putamen', 'Right Putamen'])),
             'vmPFC': (c, lab(cort.labels, ['Frontal Medial Cortex', 'Subcallosal Cortex']))}
+    if roi_set == 'mtl':     # anterior parahippocampal gyrus = entorhinal + perirhinal cortex in Harvard-Oxford
+        defs = {'hippocampus': (s, lab(sub.labels, ['Left Hippocampus', 'Right Hippocampus'])),
+                'amygdala': (s, lab(sub.labels, ['Left Amygdala', 'Right Amygdala'])),
+                'PHG_anterior': (c, lab(cort.labels, ['Parahippocampal Gyrus, anterior division'])),
+                'PHG_posterior': (c, lab(cort.labels, ['Parahippocampal Gyrus, posterior division'])),
+                'fusiform_temporal': (c, lab(cort.labels, ['Temporal Fusiform Cortex, anterior division',
+                                                           'Temporal Fusiform Cortex, posterior division']))}
     return {k: nib.Nifti1Image(np.isin(arr, idx).astype(np.uint8), ref.affine) for k, (arr, idx) in defs.items()}
 
 
@@ -68,7 +75,7 @@ def sign_flip_p(x):
     return float((np.abs(null) >= abs(x.mean()) - 1e-12).mean())
 
 
-def main(bids, subjects, n_perm, n_jobs, contrasts, design='logreward'):
+def main(bids, subjects, n_perm, n_jobs, contrasts, design='logreward', roi_set='reward', roi_only=False):
     root = Path(bids) / 'derivatives' / DESIGNS[design][0]
     out = root / 'group'
     out.mkdir(parents=True, exist_ok=True)
@@ -86,13 +93,13 @@ def main(bids, subjects, n_perm, n_jobs, contrasts, design='logreward'):
         arr = np.asarray(data.dataobj)
         mask = image.new_img_like(data.slicer[..., 0], (np.isfinite(arr) & (arr != 0)).all(-1).astype(np.uint8))
         if rois is None:
-            rois = reward_rois(mask)
+            rois = reward_rois(mask, roi_set)
             union = image.new_img_like(mask, (sum(np.asarray(r.dataobj) for r in rois.values()) > 0).astype(np.uint8))
             reward_mask = masking.intersect_masks([mask, union], threshold=1, connected=False)
-            reward_mask.to_filename(str(out / 'reward_mask.nii.gz'))
+            reward_mask.to_filename(str(out / f'{roi_set}_mask.nii.gz'))
         dm = pd.DataFrame({'intercept': np.ones(n)})
         kw = dict(design_matrix=dm, n_perm=n_perm, two_sided_test=True, n_jobs=n_jobs, random_state=0)
-        for scope, m in (('wholebrain', mask), ('reward', reward_mask)):
+        for scope, m in (() if roi_only else (('wholebrain', mask), ('reward', reward_mask))):
             res = non_parametric_inference(imgs, mask=m, threshold=.001, tfce=True, **kw)
             for k, img in res.items():
                 img.to_filename(str(out / f'group_{SPACE}_contrast-{con}_scope-{scope}_stat-{k}.nii.gz'))
@@ -116,6 +123,7 @@ def main(bids, subjects, n_perm, n_jobs, contrasts, design='logreward'):
                           for s, v in zip([Path(i).name[4:6] for i in imgs], vals)]
     r = pd.DataFrame(roi_rows)
     tag = f'_{contrasts[0]}' if len(contrasts) == 1 else ''      # one file per array task
+    tag = ('' if roi_set == 'reward' else f'_rois-{roi_set}') + tag
     r.round(5).to_csv(out / f'roi_stats{tag}.tsv', sep='\t', index=False)
     pd.DataFrame(subj_rows).round(6).to_csv(out / f'roi_subject_means{tag}.tsv', sep='\t', index=False)
     pd.set_option('display.width', 200)
@@ -130,5 +138,8 @@ if __name__ == '__main__':
     ap.add_argument('--contrasts', nargs='+', default=None)
     ap.add_argument('--n-perm', type=int, default=5000)   # n = 12 has only 4096 distinct sign flips
     ap.add_argument('--n-jobs', type=int, default=16)
+    ap.add_argument('--rois', choices=['reward', 'mtl'], default='reward', help='ROI set for the ROI means')
+    ap.add_argument('--roi-only', action='store_true', help='only the ROI means, no permutation maps')
     a = ap.parse_args()
-    main(a.bids_folder, a.subjects, a.n_perm, a.n_jobs, a.contrasts or contrasts_for(a.design), a.design)
+    main(a.bids_folder, a.subjects, a.n_perm, a.n_jobs, a.contrasts or contrasts_for(a.design), a.design, a.rois,
+         a.roi_only)
