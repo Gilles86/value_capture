@@ -90,7 +90,8 @@ def alpha_box(path):
 
 def view_sizes(render_dir, stems, margin=6):
     """Per view, the largest tight crop (h, w in pixels) over all subjects: every image of a column is
-    drawn at one scale (pixels per mm), centred in its cell, so brain sizes stay comparable."""
+    drawn at one scale, centred in its cell, so brain sizes stay comparable down a column. Each column
+    is scaled so its tallest render fills the row (columns differ slightly in scale)."""
     out = {}
     for v, _ in VIEWS:
         bs = np.array([alpha_box(p) for s in stems if (p := render_dir / f'{s}_{v}.png').exists()])
@@ -151,9 +152,7 @@ def main(render_dir, subjects, example, out, width_mm=180):
     render_settings(render_dir)
     stems = [f'sub-{s:02d}_r2' for s in subjects] + [f'sub-{example:02d}_areas']
     sizes = view_sizes(render_dir, stems)
-    hmax = max(h for h, _ in sizes.values())
-    # One row height; each column's width follows from its largest render at the shared scale
-    asp = np.array([sizes[v][1] / hmax for v, _ in VIEWS])
+    asp = np.array([sizes[v][1] / sizes[v][0] for v, _ in VIEWS])          # width / height per column
     label_w = 9 * MM                       # subject labels at the row start
     W = width_mm * MM
     row_h = (W - label_w) / asp.sum()      # every row spans the full width
@@ -180,10 +179,10 @@ def main(render_dir, subjects, example, out, width_mm=180):
         for x, (v, _), a in zip(xs, VIEWS, asp):
             ax = at(x, y, a * row_h, row_h)
             ax.set_position([x / W, y / H, a * row_h / W, row_h / H])
-            show(ax, render_dir / f'{stem}_{v}.png', (hmax, sizes[v][1]))
+            show(ax, render_dir / f'{stem}_{v}.png', sizes[v])
         fig.text(.5 * MM / W, (y + row_h / 2) / H, label, ha='left', va='center', fontsize=7, color=FG)
 
-    row(f'sub-{example:02d}_areas', ys[1], f'Areas\nsub-{example:02d}')
+    row(f'sub-{example:02d}_areas', ys[1], f'Visual\nareas\nsub-{example:02d}')
     area_key(at(label_w + 2 * MM, ys[2] + 1 * MM, W - label_w - 4 * MM, key_h - 2 * MM))
     for i, s in enumerate(subjects):
         row(f'sub-{s:02d}_r2', ys[4 + i], f'sub-{s:02d}')

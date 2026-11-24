@@ -9,6 +9,7 @@ For every voxel in the visual areas (incl. Wang IPS) with pRF R² >= --min-r2:
 - leak_slope: regression of that per-trial difference on the HRF overlap c(delay) of the points and search events
   over the points trials (positive = more leak the closer the points follow the search).
 - leak_z: leak divided by the SD of the no-points residuals (comparable across voxels).
+- leak_big / leak_small: leak on points trials with >= 100 points (3-4 characters; high multiplier only) and the rest.
 
 One row per voxel. If the leak is retinotopic it falls to ~0 as overlap -> 0; if it is a global (reward / arousal)
 signal, peripheral voxels carry it too.
@@ -72,9 +73,13 @@ def main(subject, bids, glmsingle_deriv, prf_deriv, min_r2, out):
     cs = c[shown] - c[shown].mean()
     slope = (cs[:, None] * (D[shown] - D[shown].mean(0))).sum(0) / (cs ** 2).sum()
     resid_sd = D[~shown].std(0)
+    big = shown & (trials.earned_points.fillna(0).to_numpy() >= 100)      # 3-4 characters, high multiplier only
+    small = shown & ~big
     t = pd.DataFrame(dict(subject=subject, roi=[roi_of[int(v)] for v in varea[sel]], x=p.x.to_numpy(),
                           y=p.y.to_numpy(), sd=p.sd.to_numpy(), r2=p.r2.to_numpy(), overlap=overlap, leak=leak,
-                          leak_slope=slope, leak_z=leak / resid_sd))
+                          leak_slope=slope, leak_z=leak / resid_sd,
+                          leak_big=D[big].mean(0), leak_small=D[small].mean(0), n_big=int(big.sum()),
+                          n_small=int(small.sum())))
     t['ecc'] = np.hypot(t.x, t.y)
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     t.round(6).to_csv(out, sep='\t', index=False)

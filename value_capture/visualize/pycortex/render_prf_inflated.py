@@ -248,13 +248,13 @@ def render(ds, cx_subject, out_dir, stem, views, wait):
                         break
                 except (TypeError, IndexError, KeyError):   # UI not up yet
                     pass
-                if time.time() - t0 > 180:
+                if time.time() - t0 > max(180, 3 * wait):   # slow under load
                     raise TimeoutError(f'{stem} {view}: viewer did not take the view')
             time.sleep(4)
             handle.getImage(str(fn), IMAGE_SIZE)
             t0 = time.time()
             while not fn.exists():
-                if time.time() - t0 > 300:
+                if time.time() - t0 > max(300, 5 * wait):
                     raise TimeoutError(fn)
                 time.sleep(1)
             time.sleep(2)
