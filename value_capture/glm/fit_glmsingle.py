@@ -91,10 +91,18 @@ def bar_condition_label(row):
 
 
 FEEDBACK_CONDITIONS = ('feedback_high', 'feedback_low')
+# The pilot sessions had a third, medium value level (rank 1, x10 points). It gets its own label, only when such
+# trials exist, so designs without rank 1 are unchanged.
+FEEDBACK_MEDIUM = 'feedback_medium'
 
 
 def feedback_condition_label(row):
-    return 'feedback_high' if row['value_rank'] == 2 else 'feedback_low'
+    """Points display by multiplier: rank 2 (x100) high, rank 1 (x10) medium, else (rank 0 or no rank, x1) low."""
+    if row['value_rank'] == 2:
+        return 'feedback_high'
+    if row['value_rank'] == 1:
+        return FEEDBACK_MEDIUM
+    return 'feedback_low'
 
 
 def build_condition_index(all_events, feedback_events=False):
@@ -104,9 +112,11 @@ def build_condition_index(all_events, feedback_events=False):
     GLMsingle's fracridge cross-validation groups identical conditions together.
     """
     conditions = set()
+    has_medium = False
     for events in all_events:
         for _, row in events[events['event_type'] == 'target'].iterrows():
             conditions.add(bar_condition_label(row))
+        has_medium |= bool((events['value_rank'] == 1).any())
 
     def _sort_key(label):
         # bar_<pos>_<ori>  →  sort by orientation then position
@@ -116,7 +126,7 @@ def build_condition_index(all_events, feedback_events=False):
 
     idx = {c: i for i, c in enumerate(sorted(conditions, key=_sort_key))}
     if feedback_events:          # points displays as their own single-trial events (after the bar conditions)
-        for c in FEEDBACK_CONDITIONS:
+        for c in FEEDBACK_CONDITIONS + ((FEEDBACK_MEDIUM,) if has_medium else ()):
             idx[c] = len(idx)
     return idx
 
@@ -196,8 +206,8 @@ def build_design_matrix(events, n_vols, condition_to_idx, tr=TR, feedback_events
     return dm, trial_order, trial_metadata
 
 
-def feedback_regressors(events, n_vols_up, n_removed_up, tr=None):
-    """(n_vols_up × 2) nuisance regressors for the points displays (1 s, shown on ~half the trials):
+def feedback_regressors(events, n_vols_up, n_removed_up, tr=None, ranks=(2, 0)):
+    """(n_vols_up × len(ranks)) nuisance regressors for the points displays (1 s, shown on ~half the trials):
     high- and low-multiplier feedback separately, boxcar convolved with the SPM canonical HRF at the upsampled
     TR. GLMsingle otherwise models only the search display, and the feedback response (foveal, +85-145 % of the
     bar-driven beta at eccentricity < .5 deg, notes/data/feedback_leak.tsv) ends up in that trial's beta."""
@@ -205,10 +215,13 @@ def feedback_regressors(events, n_vols_up, n_removed_up, tr=None):
     tr = tr or TR_UP
     fb = events[(events['event_type'] == 'feedback') & events['show_feedback'].isin([True, 'True'])]
     hrf = spm_hrf(tr, oversampling=1)
-    out = np.zeros((n_vols_up, 2), np.float32)
-    for k, rank in enumerate((2, 0)):
+    out = np.zeros((n_vols_up, len(ranks)), np.float32)
+    for k, rank in enumerate(ranks):
         box = np.zeros(n_vols_up)
-        for on in fb.loc[fb['value_rank'] == rank, 'onset']:
+        sel = fb['value_rank'] == rank
+        if rank == 0:                                  # absent trials without a rank (pilot design) are x1 = low
+            sel |= fb['value_rank'].isna()
+        for on in fb.loc[sel, 'onset']:
             i0 = int(np.round(on / tr)) - n_removed_up
             box[max(i0, 0):max(i0 + int(np.round(1.0 / tr)), 0)] = 1.
         out[:, k] = np.convolve(box, hrf)[:n_vols_up]
@@ -234,7 +247,7 @@ def _patch_runwise_fir(n_runs):
 
 
 def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmriprep',
-         fwhm=0, debug=False, feedback_regressors_on=False, feedback_events=False):
+         fwhm=0, debug=False, feedback_regressors_on=False, feedback_events=False, out_deriv=None):
     sub = Subject(subject, bids_folder=bids_folder)
 
     if sessions is None:
@@ -243,6 +256,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
     ses_label = f'ses-{sessions[0]}' if len(sessions) == 1 else 'ses-all'
     glmsingle_deriv = ((f'glmsingle_s{fwhm}mm' if fwhm else 'glmsingle') + ('_fbreg' if feedback_regressors_on else '')
                        + ('_fbevents' if feedback_events else ''))
+    glmsingle_deriv = out_deriv or glmsingle_deriv
     print(f'sub-{subject}  {ses_label}  [{fmriprep_deriv}]  fwhm={fwhm}mm  → {glmsingle_deriv}')
 
     # First pass: collect all events to build a globally consistent condition map
@@ -252,6 +266,8 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
         events_list = [sub.get_onsets(session, run) for run in runs]
         session_run_events[session] = (runs, events_list)
 
+    has_medium = any((ev['value_rank'] == 1).any() for _, (_, evs) in session_run_events.items() for ev in evs)
+    fb_ranks = (2, 0, 1) if has_medium else (2, 0)     # rank-1 (medium) column only when such trials exist
     condition_to_idx = build_condition_index(
         (ev for session, (runs, events_list) in session_run_events.items()
          for ev in events_list), feedback_events=feedback_events)
@@ -295,7 +311,7 @@ def main(subject, sessions=None, bids_folder=BIDS_FOLDER, fmriprep_deriv='fmripr
             X.append(dm)
             if feedback_regressors_on:
                 n_removed_up = int(round(n_removed * TR / TR_UP))
-                extra.append(feedback_regressors(events, n_vols_up, n_removed_up))
+                extra.append(feedback_regressors(events, n_vols_up, n_removed_up, ranks=fb_ranks))
             all_trial_types.extend(trial_order)
             for m in trial_meta:
                 m.update({'session': session, 'run': run})
@@ -368,6 +384,8 @@ if __name__ == '__main__':
     parser.add_argument('--feedback-events', action='store_true',
                         help='Model each shown points display as its own single-trial event (conditions '
                              'feedback_high / feedback_low); writes desc-feedback betas too; output *_fbevents.')
+    parser.add_argument('--out-deriv', default=None,
+                        help='Output derivative folder name (default: derived from the options).')
     parser.add_argument('--debug', action='store_true',
                         help='Write outputs and figures for all 4 GLMsingle model steps.')
     args = parser.parse_args()
@@ -378,4 +396,5 @@ if __name__ == '__main__':
          fwhm=args.fwhm,
          debug=args.debug,
          feedback_regressors_on=args.feedback_regressors,
-         feedback_events=args.feedback_events)
+         feedback_events=args.feedback_events,
+         out_deriv=args.out_deriv)

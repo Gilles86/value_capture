@@ -12,6 +12,11 @@ few wild runs no longer dominates as it does in a test on 12 independent per-sub
 
     python value_capture/gainfield/hierarchical_value_gain.py --folder notes/data/gain_fields_dog_fbevents_free_exclude_widths
 Output: <folder>/../hierarchical_value_gain_<folder name>.tsv (+ .nc per area with --save-idata)
+
+Other contrasts (--contrast medium_low / high_medium, for fits with a medium value level): the same model on those
+two levels; the coefficient keeps the name high_minus_low (= the second level minus the first) and the output file
+gets the contrast name appended. --per-subject also writes each subject's slope (population + subject deviation).
+--min-subjects (default 5) is the smallest number of subjects for which an area is fitted.
 """
 import argparse
 import glob
@@ -23,15 +28,19 @@ import numpy as np
 import pandas as pd
 
 
-def load(folder, rois):
+CONTRASTS = {'high_low': ('low', 'high'), 'medium_low': ('low', 'medium'), 'high_medium': ('medium', 'high')}
+
+
+def load(folder, rois, contrast='high_low'):
+    lo, hi = CONTRASTS[contrast]
     files = [f for f in sorted(glob.glob(str(Path(folder) / 'sub-*_gain_fields*.tsv'))) if Path(f).stat().st_size > 1]
     t = pd.concat(pd.read_csv(f, sep='\t', dtype={'subject': str}) for f in files)
     t = t[t.scope.str.startswith('run-') & t.roi.isin(rois)].drop_duplicates(['subject', 'roi', 'scope'])
-    cols = {'field_gain_distractor_low': 'low', 'field_gain_distractor_high': 'high'}
+    cols = {f'field_gain_distractor_{lo}': lo, f'field_gain_distractor_{hi}': hi}
     long = t.melt(id_vars=['subject', 'roi', 'session', 'run'], value_vars=list(cols), var_name='value',
                   value_name='gain')
     long['value'] = long.value.map(cols)
-    long['high_minus_low'] = np.where(long.value == 'high', .5, -.5)   # explicit coding: slope = high - low
+    long['high_minus_low'] = np.where(long.value == hi, .5, -.5)   # explicit coding: slope = high - low (or hi - lo)
     long['gain'] *= 100
     long['run_id'] = long.subject + '_' + long.session.astype(int).astype(str) + '_' + long.run.astype(int).astype(str)
     return long.dropna(subset=['gain'])
@@ -43,12 +52,13 @@ def fit(d, draws, tune, seed):
     return m, idata
 
 
-def main(folder, rois, draws, tune, save_idata, seed=0):
-    d_all = load(folder, rois)
-    rows = []
+def main(folder, rois, draws, tune, save_idata, seed=0, contrast='high_low', min_subjects=5, per_subject=False):
+    d_all = load(folder, rois, contrast)
+    tag = '' if contrast == 'high_low' else f'_{contrast}'
+    rows, subj_rows = [], []
     for roi in rois:
         d = d_all[d_all.roi == roi]
-        if d.subject.nunique() < 5:
+        if d.subject.nunique() < min_subjects:
             print(roi, 'skipped:', d.subject.nunique(), 'subjects')
             continue
         m, idata = fit(d, draws, tune, seed)
@@ -60,11 +70,23 @@ def main(folder, rois, draws, tune, save_idata, seed=0):
                          rhat_max=float(summ.r_hat.max()), ess_bulk_min=float(summ.ess_bulk.min()),
                          divergences=int(idata.sample_stats.diverging.sum())))
         print(pd.DataFrame(rows[-1:]).round(3).to_string(index=False), flush=True)
+        if per_subject:
+            dev = idata.posterior['high_minus_low|subject']
+            sdim = [c for c in dev.dims if c not in ('chain', 'draw')][0]
+            for s in dev[sdim].values:
+                v = (idata.posterior['high_minus_low'] + dev.sel({sdim: s})).values.ravel()
+                h = az.hdi(v, hdi_prob=.95)
+                subj_rows.append(dict(roi=roi, subject=s, mean=v.mean(), hdi_low=h[0], hdi_high=h[1],
+                                      p_high_gt_low=(v > 0).mean()))
         if save_idata:
-            idata.to_netcdf(Path(folder).parent / f'hierarchical_value_gain_{Path(folder).name}_{roi}.nc')
-    out = Path(folder).parent / f'hierarchical_value_gain_{Path(folder).name}.tsv'
+            idata.to_netcdf(Path(folder).parent / f'hierarchical_value_gain_{Path(folder).name}{tag}_{roi}.nc')
+    out = Path(folder).parent / f'hierarchical_value_gain_{Path(folder).name}{tag}.tsv'
     pd.DataFrame(rows).round(4).to_csv(out, sep='\t', index=False)
     print(out)
+    if per_subject:
+        out_s = out.with_name(out.stem + '_subjects.tsv')
+        pd.DataFrame(subj_rows).round(4).to_csv(out_s, sep='\t', index=False)
+        print(out_s)
 
 
 if __name__ == '__main__':
@@ -74,5 +96,9 @@ if __name__ == '__main__':
     ap.add_argument('--draws', type=int, default=2000)
     ap.add_argument('--tune', type=int, default=2000)
     ap.add_argument('--save-idata', action='store_true')
+    ap.add_argument('--contrast', choices=list(CONTRASTS), default='high_low')
+    ap.add_argument('--min-subjects', type=int, default=5)
+    ap.add_argument('--per-subject', action='store_true')
     a = ap.parse_args()
-    main(a.folder, a.rois, a.draws, a.tune, a.save_idata)
+    main(a.folder, a.rois, a.draws, a.tune, a.save_idata, contrast=a.contrast, min_subjects=a.min_subjects,
+         per_subject=a.per_subject)

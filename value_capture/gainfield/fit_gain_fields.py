@@ -29,6 +29,14 @@ the delay between them), in an extra foveal pixel layer on the same coordinates.
 an image scale) is fitted; the PRFs decide where it lands; the gain fields do not modulate that layer. A points term fitted on all trials would also absorb a value effect, since the
 multiplier follows the distractor's value.
 
+Medium value (pilot design: rank 1, x10 points): when distractor-present trials of rank 1 exist, a fourth gain
+``distractor_medium`` is added (its own field with --separate-widths). Designs without rank 1 are unchanged.
+
+Betas in another subject's space (--anat-subject, --betas): the grey-matter mask, visual-area atlas and pRF fits
+of ``--anat-subject`` are used, and ``--betas`` is the 4D beta image already resampled into that subject's BOLD grid
+(same trial order as the trial metadata of ``--glmsingle-deriv``). Trials, behaviour and outputs stay keyed by the
+subject label given.
+
 Outputs (one row per subject x ROI x scope): scope 'all' = all trials; scope 'run-<s>-<r>' = gains refitted per run
 with sigma fixed at the 'all' estimate (learning curves, for bauer). Plus R² of the gain model vs the PRF model.
 
@@ -50,6 +58,8 @@ from value_capture.utils.data import Subject  # noqa: E402
 ROIS = {'V1': (1,), 'V2': (2,), 'V3': (3,), 'hV4': (4,), 'LO': (7, 8), 'V3AB': (11, 12), 'VO': (5, 6), 'TO': (9, 10),
         'IPS': (101,)}
 GAIN_LABELS = ['target', 'distractor_low', 'distractor_high']
+GAIN_LABELS_MEDIUM = ['target', 'distractor_low', 'distractor_medium', 'distractor_high']
+VALUE_NAME = {2: 'high', 1: 'medium', 0: 'low'}
 COLOUR_GAIN_LABELS = ['target'] + [f'distractor_{c}_{v}' for c in ('green', 'orange') for v in ('low', 'high')]
 HIGH_COLOUR = {0: 'orange', 1: 'green'}          # value_condition -> colour of the high-value (rank 2) distractor
 
@@ -84,7 +94,7 @@ def assignments(trials, split_colour=False):
     for _, t in trials.iterrows():
         a = {'target': int(t.target_location)}
         if t.distractor_present:
-            value = 'high' if t.value_rank == 2 else 'low'
+            value = VALUE_NAME[int(t.value_rank)]
             label = f'distractor_{distractor_colour(t)}_{value}' if split_colour else f'distractor_{value}'
             a[label] = int(t.distractor_location)
         out.append(a)
@@ -98,7 +108,7 @@ def r2(y, yhat):
 
 def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_iter, lr, out, prf_model='gauss',
          cross_session=False, points='keep', free_prf=False, split_colour=False, min_ecc=0., separate_widths=False,
-         max_points_overlap=None):
+         max_points_overlap=None, anat_subject=None, betas=None):
     from braincoder.models import GainFieldDoGPRF2D, GainFieldPRF2D
     from braincoder.models.gain_field import GainField
     from braincoder.optimize import ParameterFitter
@@ -107,11 +117,16 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
 
     sub = Subject(subject, bids_folder=bids)
     sessions = sub.get_sessions()
+    anat = sub if anat_subject is None else Subject(anat_subject, bids_folder=bids)   # whose mask, atlas and pRFs
+    anat_session = anat.get_sessions()[0]
     trials = trial_table(sub, sessions, glmsingle_deriv)
+    has_medium = bool((trials.distractor_present & (trials.value_rank == 1)).any())
     images = fp.build_paradigm(trials, 'bar_items')                       # (trials, pixels)
     grid = fp.make_grid_coordinates()
     model_class = {'gauss': GainFieldPRF2D, 'dog': GainFieldDoGPRF2D}[prf_model]
-    gain_labels = COLOUR_GAIN_LABELS if split_colour else GAIN_LABELS
+    if split_colour and has_medium:
+        raise NotImplementedError('--split-colour with a medium value level')
+    gain_labels = COLOUR_GAIN_LABELS if split_colour else (GAIN_LABELS_MEDIUM if has_medium else GAIN_LABELS)
     extra = {}
     if points == 'model':
         from keras import ops
@@ -146,13 +161,15 @@ def main(subject, rois, bids, prf_deriv, glmsingle_deriv, min_r2, per_run, n_ite
     paradigm_all = model.make_paradigm(images, assignments(trials, split_colour))
 
     def read_prf(deriv):
-        return pd.read_csv(Path(bids) / 'derivatives' / deriv / f'sub-{subject}' / 'ses-all' / 'func' /
-                           f'sub-{subject}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv',
+        a = anat.subject_id
+        return pd.read_csv(Path(bids) / 'derivatives' / deriv / f'sub-{a}' / 'ses-all' / 'func' /
+                           f'sub-{a}_ses-all_task-valuecapture_space-T1w_desc-prf_params.tsv',
                            sep='\t', index_col=0)
-    mask = fp._get_gm_mask(sub, sessions[0], bids, .1)
-    Y_all = masking.apply_mask(sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv),
-                               mask).astype(np.float32)
-    varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=sessions[0], include_wang=True), mask))
+    mask = fp._get_gm_mask(anat, anat_session, bids, .1)
+    beta_img = betas if betas is not None else sub.get_single_trial_estimates(sessions, glmsingle_deriv=glmsingle_deriv)
+    Y_all = masking.apply_mask(beta_img, mask).astype(np.float32)
+    assert Y_all.shape[0] == len(trials), (Y_all.shape, len(trials))
+    varea = np.round(masking.apply_mask(anat.get_retinotopic_atlas(bold_space=True, session=anat_session, include_wang=True), mask))
 
     # folds: (label, trial indices, PRF derivative)
     if cross_session:
@@ -255,6 +272,8 @@ if __name__ == '__main__':
     ap.add_argument('--out-suffix', default='', help='appended to the output file name, e.g. _extra-rois')
     ap.add_argument('--separate-widths', action='store_true', help='one field (own width) per gain label')
     ap.add_argument('--tag', default='', help='suffix of the output folder, e.g. fbevents_subtract')
+    ap.add_argument('--anat-subject', default=None, help='use this subject\'s mask, atlas and pRFs')
+    ap.add_argument('--betas', default=None, help='4D beta NIfTI in that subject\'s BOLD grid (with --anat-subject)')
     a = ap.parse_args()
     folder = 'gain_fields' if a.prf_model == 'gauss' else f'gain_fields_{a.prf_model}'
     folder += f'_{a.tag}' if a.tag else ''
@@ -263,4 +282,4 @@ if __name__ == '__main__':
     main(a.subject, a.rois, a.bids_folder, a.prf_deriv, a.glmsingle_deriv, a.min_r2, a.per_run, a.n_iter,
          a.learning_rate, out, prf_model=a.prf_model, cross_session=a.cross_session, points=a.points,
          free_prf=a.free_prf, split_colour=a.split_colour, min_ecc=a.min_ecc, separate_widths=a.separate_widths,
-         max_points_overlap=a.max_points_overlap)
+         max_points_overlap=a.max_points_overlap, anat_subject=a.anat_subject, betas=a.betas)
