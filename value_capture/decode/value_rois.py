@@ -2,8 +2,9 @@
 
 Single-trial search betas (``glmsingle_fbevents``, T1w, unsmoothed) of distractor-present trials, in anatomical ROIs
 from the subject's FreeSurfer aparc+aseg (entorhinal, parahippocampal, fusiform, hippocampus, amygdala, caudate,
-putamen, accumbens, medial / lateral OFC) and, as controls that should carry colour, V1 / hV4 / VO from the
-neuropythy atlas.
+putamen, accumbens, medial / lateral OFC) and, as controls, all visual areas from the
+neuropythy atlas
+(V1-V3, hV4, VO, LO, TO, V3AB) and Wang IPS0-5.
 
 Colour and value are confounded within a session and reversed between sessions (CLAUDE.md), which separates them:
 
@@ -35,7 +36,8 @@ from value_capture.utils.data import Subject
 ASEG_ROIS = {'entorhinal': (1006, 2006), 'parahippocampal': (1016, 2016), 'fusiform': (1007, 2007),
              'hippocampus': (17, 53), 'amygdala': (18, 54), 'caudate': (11, 50), 'putamen': (12, 51),
              'accumbens': (26, 58), 'medialOFC': (1014, 2014), 'lateralOFC': (1012, 2012)}
-VAREA_ROIS = {'V1': (1,), 'hV4': (4,), 'VO': (5, 6)}
+VAREA_ROIS = {'V1': (1,), 'V2': (2,), 'V3': (3,), 'hV4': (4,), 'VO': (5, 6), 'LO': (7, 8), 'TO': (9, 10),
+              'V3AB': (11, 12), 'IPS': (101,)}
 
 
 def zscore_within(X, groups):
@@ -64,7 +66,8 @@ def main(subject, bids, glmsingle_deriv, out_dir):
     aseg = np.round(masking.apply_mask(image.resample_to_img(image.load_img(fs / 'aparc+aseg.mgz'), mask,
                                                              interpolation='nearest', force_resample=True,
                                                              copy_header=True), mask))
-    varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=int(sessions[0])), mask))
+    varea = np.round(masking.apply_mask(sub.get_retinotopic_atlas(bold_space=True, session=int(sessions[0]),
+                                                             include_wang=True), mask))
     rois = {k: np.isin(aseg, v) for k, v in ASEG_ROIS.items()} | {k: np.isin(varea, v) for k, v in VAREA_ROIS.items()}
     keep_vox = np.flatnonzero(np.any(list(rois.values()), 0))
     Y_all = masking.apply_mask(betas, mask)[:, keep_vox].astype(np.float32)
