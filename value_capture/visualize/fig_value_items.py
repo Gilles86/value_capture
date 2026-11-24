@@ -315,8 +315,8 @@ def main(points='exclude'):
     tops = [.9 - i * step for i in range(len(PANELS))]
     r = fig.canvas.get_renderer()
     fig.text(.012, .995, f"DoG pRFs; {VARIANTS[points]['title']}", ha='left', va='top', fontsize=6.5, color=MUTED)
-    fig.text(.99, .995, 'Numbers above: p vs 0 per series; bracket: high > low, one-sided. Right of the divider: '
-             'pathways pooled per subject', ha='right', va='top', fontsize=6, color=MUTED)
+    fig.text(.012, .983, 'Numbers above: p vs 0 per series; bracket: high > low, one-sided. Right of the divider: '
+             'pathways pooled per subject', ha='left', va='top', fontsize=6, color=MUTED)
     x = .012
     for lab, c in [('Target', TARGET), ('Low-value distractor', LOW), ('High-value distractor', HIGH)]:
         h = .026
