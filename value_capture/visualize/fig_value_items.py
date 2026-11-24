@@ -157,8 +157,8 @@ def panel_triplet(ax, s, ylabel, ylim=None, log=False, test=True, ref=0.):
     offset_spines(ax)
 
 
-def items_betas(points='exclude'):
-    f = sorted(glob.glob(str(DATA / 'item_location_responses' / '*.tsv')))
+def items_betas(points='exclude', folder='item_location_responses'):
+    f = sorted(glob.glob(str(DATA / folder / '*.tsv')))
     t = pd.concat([pd.read_csv(x, sep='\t', dtype={'subject': str}) for x in f]).query("points == @points")
     # trial-weighted mean over sessions and locations, in % signal change
     t['w'] = t['diff'] * t.n_trials
@@ -282,7 +282,10 @@ def section(fig, y, text):
 
 VARIANTS = {'exclude': dict(decoded='fbevents_dog_none', title='only trials without the points display'),
             'subtract': dict(decoded='fbevents_dog_regress', title='all trials, points response subtracted'),
-            'keep': dict(decoded='fbevents_dog_all', title='all trials, nothing removed (points response included)')}
+            'keep': dict(decoded='fbevents_dog_all', title='all trials, nothing removed (points response included)'),
+            'overlap': dict(decoded='fbevents_dog_ovl003_all', items='item_location_responses_ovl003', item_points='keep',
+                            gain='keep_ovl003',
+                            title='all trials, nothing removed; only voxels whose pRF covers < 0.3% of the points text')}
 
 
 PANELS = [  # key, data, y label, icon, heading, extra panel_triplet kwargs
@@ -301,10 +304,12 @@ PANELS = [  # key, data, y label, icon, heading, extra panel_triplet kwargs
 
 
 def main(points='exclude'):
-    amp, fwhm, shared = gain_widths(f'gain_fields_dog_fbevents_free_{points}_widths',
-                                    fallback=f'gain_fields_dog_fbevents_free_{points}')
-    items, bars = decoded(VARIANTS[points]['decoded'])
-    data = dict(betas=items_betas(points), amp=amp, fwhm=fwhm, items=items, bars=bars)
+    v = VARIANTS[points]
+    g = v.get('gain', points)
+    amp, fwhm, shared = gain_widths(f'gain_fields_dog_fbevents_free_{g}_widths',
+                                    fallback=f'gain_fields_dog_fbevents_free_{g}')
+    items, bars = decoded(v['decoded'])
+    data = dict(betas=items_betas(v.get('item_points', points), v.get('items', 'item_location_responses')), amp=amp, fwhm=fwhm, items=items, bars=bars)
     fig = plt.figure(figsize=(DOUBLE, 13.5))
     X, W, H, step = .1, .76, .085, .19
     tops = [.9 - i * step for i in range(len(PANELS))]
