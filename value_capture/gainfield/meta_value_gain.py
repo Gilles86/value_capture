@@ -29,7 +29,7 @@ AREAS = [a for g in GROUPS.values() for a in g]
 GROUP_OF = {a: g for g, aa in GROUPS.items() for a in aa}
 
 
-def table(folder, lo='low', hi='high'):
+def table(folder, lo='low', hi='high', min_subjects=5):
     files = [f for f in sorted(glob.glob(str(Path(folder) / 'sub-*_gain_fields*.tsv'))) if Path(f).stat().st_size > 1]
     t = pd.concat(pd.read_csv(f, sep='\t', dtype={'subject': str}) for f in files)
     t = t[t.roi.isin(AREAS)].drop_duplicates(['subject', 'roi', 'scope'])
@@ -37,15 +37,19 @@ def table(folder, lo='low', hi='high'):
     y = t[t.scope == 'all'].set_index(['subject', 'roi']).d.rename('y')
     runs = t[t.scope.str.startswith('run-')].groupby(['subject', 'roi']).d
     se = (runs.std() / np.sqrt(runs.count())).rename('se')
-    return pd.concat([y, se, runs.count().rename('n_runs')], axis=1).dropna().reset_index()
+    t = pd.concat([y, se, runs.count().rename('n_runs')], axis=1).dropna().reset_index()
+    n = t.groupby('roi').subject.transform('nunique')
+    return t[n >= min_subjects].reset_index(drop=True)          # areas fitted in too few subjects drop out
 
 
-def fit(t, likelihood='normal', use_se=True, seed=0, draws=2000, tune=2000):
-    areas = [a for a in AREAS if a in set(t.roi)]
-    groups = [g for g in GROUPS if any(GROUP_OF[a] == g for a in areas)]
+def fit(t, likelihood='normal', use_se=True, seed=0, draws=2000, tune=2000, group_def=None):
+    group_def = group_def or GROUPS
+    group_of = {a: g for g, aa in group_def.items() for a in aa}
+    areas = [a for aa in group_def.values() for a in aa if a in set(t.roi)]
+    groups = [g for g in group_def if any(group_of[a] == g for a in areas)]
     subs = sorted(t.subject.unique())
     ai = t.roi.map({a: i for i, a in enumerate(areas)}).values
-    gi_area = np.array([groups.index(GROUP_OF[a]) for a in areas])
+    gi_area = np.array([groups.index(group_of[a]) for a in areas])
     si = t.subject.map({s: i for i, s in enumerate(subs)}).values
     y, se = t.y.values, (t.se.values if use_se else np.zeros(len(t)))
     sy = float(np.std(y))
