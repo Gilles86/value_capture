@@ -101,7 +101,7 @@ def main(folder, rois, draws, tune, save_idata, seed=0, contrast='high_low', min
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--folder', required=True)
-    ap.add_argument('--rois', nargs='+', default=['V1', 'V2', 'V3', 'hV4', 'LO', 'V3AB'])
+    ap.add_argument('--rois', nargs='+', default=['V1', 'V2', 'V3', 'V3AB', 'IPS', 'hV4', 'LO', 'TO', 'VO'])
     ap.add_argument('--draws', type=int, default=2000)
     ap.add_argument('--tune', type=int, default=2000)
     ap.add_argument('--save-idata', action='store_true')

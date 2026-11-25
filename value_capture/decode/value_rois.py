@@ -15,6 +15,9 @@ Colour and value are confounded within a session and reversed between sessions (
   ``across``  train on one session, test on the other with the value labels: AUC > .5 = a value code that survives
               the colour swap, AUC < .5 = a colour code (1 - AUC is the colour AUC).
 
+Per run (``*_runs.tsv``, for the Bayesian group models with a noise level per subject): high - low ROI-mean beta,
+and the AUC of each test run (within: the leave-one-run-out fold; across: the other-session decoder on that run).
+
 Points handling: ``keep`` all trials (the points are their own events in glmsingle_fbevents), ``exclude`` only
 trials without the points display.
 
@@ -81,7 +84,7 @@ def main(subject, bids, glmsingle_deriv, out_dir):
     y = (tr.value == 'high').to_numpy(int)
     ses = tr.session.to_numpy(int)
     run = tr.run.to_numpy(int)
-    uni, dec = [], []
+    uni, dec, runs = [], [], []
     for points in ('keep', 'exclude'):
         use = np.ones(len(tr), bool) if points == 'keep' else ~tr.show_feedback.to_numpy(bool)
         for roi, m in rois.items():
@@ -96,6 +99,12 @@ def main(subject, bids, glmsingle_deriv, out_dir):
             for (s, c, v), g in cells.groupby(['session', 'colour', 'value']):
                 uni.append(dict(subject=subject, points=points, roi=roi, n_voxels=nvox, session=s, colour=c,
                                 value=v, n_trials=len(g), beta=g.beta.mean()))
+            cells['run'] = run[use]
+            for (s, r), g in cells.groupby(['session', 'run']):
+                m = g.groupby('value').beta.mean()
+                if {'high', 'low'} <= set(m.index):
+                    runs.append(dict(subject=subject, points=points, roi=roi, session=s, run=r,
+                                     measure='univariate_high_minus_low', value=m['high'] - m['low']))
             X = zscore_within(Y, ses * 100 + run)
             for s in sessions:
                 s = int(s)
@@ -106,16 +115,26 @@ def main(subject, bids, glmsingle_deriv, out_dir):
                     if len(np.unique(y[te])) < 2:
                         continue
                     scores.append(auc(X[trn], y[trn], X[te], y[te]))
+                    runs.append(dict(subject=subject, points=points, roi=roi, session=s, run=r,
+                                     measure='auc_within', value=scores[-1]))
                 dec.append(dict(subject=subject, points=points, roi=roi, n_voxels=nvox, scheme='within',
                                 test_session=s, auc=np.mean(scores)))
                 trn, te = use & (ses != s), inses
+                clf = LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto').fit(X[trn], y[trn])
                 dec.append(dict(subject=subject, points=points, roi=roi, n_voxels=nvox, scheme='across',
-                                test_session=s, auc=auc(X[trn], y[trn], X[te], y[te])))
+                                test_session=s, auc=roc_auc_score(y[te], clf.decision_function(X[te]))))
+                for r in np.unique(run[inses]):                       # the same decoder, scored per test run
+                    te_r = inses & (run == r)
+                    if len(np.unique(y[te_r])) == 2:
+                        runs.append(dict(subject=subject, points=points, roi=roi, session=s, run=r,
+                                         measure='auc_across', value=roc_auc_score(y[te_r],
+                                                                                   clf.decision_function(X[te_r]))))
             print(points, roi, nvox, {d['scheme']: round(d['auc'], 3) for d in dec[-2:]}, flush=True)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(uni).round(6).to_csv(out_dir / f'sub-{subject}_value_rois_univariate.tsv', sep='\t', index=False)
     pd.DataFrame(dec).round(6).to_csv(out_dir / f'sub-{subject}_value_rois_decoding.tsv', sep='\t', index=False)
+    pd.DataFrame(runs).round(6).to_csv(out_dir / f'sub-{subject}_value_rois_runs.tsv', sep='\t', index=False)
 
 
 if __name__ == '__main__':

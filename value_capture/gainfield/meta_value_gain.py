@@ -8,7 +8,7 @@ standard error, so a subject whose runs scatter widely counts for less than one 
 
 y: high - low distractor gain (%) of the subject's all-runs fit (scope ``all``). se: the SD of the per-run high - low
 gains (``--per-run`` rows; pRFs and widths fixed, gains re-estimated per run) divided by sqrt(n runs). m: group means
-(fixed; Early V1-V3, Dorsal V3AB, Occipito-temporal hV4 LO), v: area within group, w: subject, tau: subject x area
+(fixed; Early V1-V3, Dorsal V3AB IPS, Occipito-temporal hV4 LO TO VO; areas without fits drop out), v: area within group, w: subject, tau: subject x area
 heterogeneity beyond the sampling error. Overall effect = mean of the area means. Non-centred, HalfNormal SDs scaled
 to sd(y). Variants: ``normal`` (primary), ``t`` (Student-t likelihood), ``nose`` (no SE weighting).
 
@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
-GROUPS = {'Early': ['V1', 'V2', 'V3'], 'Dorsal': ['V3AB'], 'Occipito-temporal': ['hV4', 'LO']}
+GROUPS = {'Early': ['V1', 'V2', 'V3'], 'Dorsal': ['V3AB', 'IPS'], 'Occipito-temporal': ['hV4', 'LO', 'TO', 'VO']}
 AREAS = [a for g in GROUPS.values() for a in g]
 GROUP_OF = {a: g for g, aa in GROUPS.items() for a in aa}
 
