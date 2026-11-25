@@ -89,8 +89,8 @@ def summarize(idata, areas, groups, variant):
                       rhat_max=float(s.r_hat.max()), ess_bulk_min=float(s.ess_bulk.min()))
 
 
-def main(folder, variants, lo='low', hi='high'):
-    t = table(folder, lo, hi)
+def main(folder, variants, lo='low', hi='high', min_subjects=5):
+    t = table(folder, lo, hi, min_subjects)
     rows, diags = [], []
     for variant in variants:
         idata, areas, groups = fit(t, likelihood='t' if variant == 't' else 'normal', use_se=variant != 'nose')
@@ -112,5 +112,6 @@ if __name__ == '__main__':
     ap.add_argument('--variants', nargs='+', default=['normal', 't', 'nose'])
     ap.add_argument('--levels', nargs=2, default=['low', 'high'], metavar=('LO', 'HI'),
                     help='Contrast HI - LO of the field_gain_distractor_<level> columns (e.g. low medium)')
+    ap.add_argument('--min-subjects', type=int, default=5, help='areas fitted in fewer subjects drop out')
     a = ap.parse_args()
-    main(a.folder, a.variants, *a.levels)
+    main(a.folder, a.variants, *a.levels, min_subjects=a.min_subjects)
