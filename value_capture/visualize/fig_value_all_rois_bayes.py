@@ -54,7 +54,7 @@ def p_text(p):
     return 'P > .999' if p > .999 else 'P < .001' if p < .001 else f'P = {p:.3f}'.replace('0.', '.')
 
 
-def row(ax, dots, post, meta, ylabel, title, pos_col=HIGH, neg_col=LOW, q=(.02, .98)):
+def row(ax, dots, post, meta, ylabel, title, pos_col=HIGH, neg_col=LOW, q=(.02, .98), labels=False, pad=12):
     """dots: DataFrame subject, roi, y, se; post: roi -> (mean, lo, hi, p_gt0); meta: summary rows (variant normal)."""
     v = dots.y.to_numpy()
     lo, hi = np.quantile(v, q)
@@ -96,22 +96,22 @@ def row(ax, dots, post, meta, ylabel, title, pos_col=HIGH, neg_col=LOW, q=(.02, 
     ax.set_ylim(lo, hi)
     ax.set_xlim(-.6, GX[-1] + .5)
     offset_spines(ax)
-    ax.set_xticks(list(XPOS.values()) + GX, [LABEL.get(r, r) for r in XPOS] + [SHORT[g] for g in names],
-                  fontsize=6)
+    ax.set_xticks(list(XPOS.values()) + GX, [LABEL.get(r, r) for r in XPOS] + [SHORT[g] for g in names]
+                  if labels else [], fontsize=6.5)
     plt.setp(ax.get_xticklabels(), rotation=40, ha='right', rotation_mode='anchor')
     ax.set_ylabel(ylabel, fontsize=7)
     ax.yaxis.set_label_coords(-.075, .5)
-    ax.set_title(title, loc='left', fontsize=7.5, pad=12)
+    ax.set_title(title, loc='left', fontsize=7.5, pad=pad)
 
 
 def group_labels(ax):
     tr = mtrans.blended_transform_factory(ax.transData, ax.transAxes)
     for g, rr in GROUPS.items():
         x0, x1 = XPOS[rr[0]] - .35, XPOS[rr[-1]] + .35
-        ax.plot([x0, x1], [1.25, 1.25], transform=tr, color=MUTED, lw=.7, clip_on=False)
-        ax.text((x0 + x1) / 2, 1.27, g, transform=tr, ha='center', va='bottom', fontsize=6.3, color='.3')
-    ax.plot([GX[0] - .35, GX[-1] + .35], [1.25, 1.25], transform=tr, color=MUTED, lw=.7, clip_on=False)
-    ax.text((GX[0] + GX[-1]) / 2, 1.27, 'Pathway means', transform=tr, ha='center', va='bottom', fontsize=6.3,
+        ax.plot([x0, x1], [1.2, 1.2], transform=tr, color=MUTED, lw=.7, clip_on=False)
+        ax.text((x0 + x1) / 2, 1.22, g, transform=tr, ha='center', va='bottom', fontsize=6.3, color='.3')
+    ax.plot([GX[0] - .35, GX[-1] + .35], [1.2, 1.2], transform=tr, color=MUTED, lw=.7, clip_on=False)
+    ax.text((GX[0] + GX[-1]) / 2, 1.22, 'Pathway means', transform=tr, ha='center', va='bottom', fontsize=6.3,
             color='.3')
 
 
@@ -141,9 +141,9 @@ def main():
     bayes = rd('bayes_value_rois_exclude.tsv')
     gf_meta, gf_data, gf_post = rd(f'meta_value_gain_{GF}.tsv'), rd(f'meta_value_gain_{GF}_data.tsv'), \
         rd(f'hierarchical_value_gain_{GF}.tsv')
-    fig, axes = plt.subplots(4, 1, figsize=(DOUBLE, 8.2), gridspec_kw=dict(hspace=1.05))
+    fig, axes = plt.subplots(4, 1, figsize=(DOUBLE, 7.2), gridspec_kw=dict(hspace=.55))
     row(axes[0], gf_data, post_of(gf_post), gf_meta, 'High − low\ngain field (%)',
-        'Gain field at the distractor (pRF-mapped areas)')
+        'Gain field at the distractor (pRF-mapped areas)', pad=40)
     group_labels(axes[0])
     uni = 'univariate_high_minus_low'
     row(axes[1], rd(f'meta_value_rois_{uni}_exclude_data.tsv'), post_of(bayes, measure=uni, effect='value'),
@@ -153,7 +153,8 @@ def main():
         rd(f'meta_value_rois_{auc}_exclude.tsv'), 'AUC − .5 (×100)',
         'Value decoded across sessions (colours swapped)')
     row(axes[3], colour_dots(), post_of(bayes, measure=uni, effect='colour'), pd.DataFrame(),
-        'Green − orange\n(% signal)', 'Mean response, green vs orange distractor', pos_col=GREEN, neg_col=ORANGE)
+        'Green − orange\n(% signal)', 'Mean response, green vs orange distractor', pos_col=GREEN, neg_col=ORANGE,
+        labels=True)
     fig.canvas.draw()
     inv = fig.transFigure.inverted()
     for ax, l in zip(axes, 'abcd'):
@@ -162,17 +163,17 @@ def main():
     # key, top right
     ax = axes[0]
     k = dict(transform=ax.transAxes, clip_on=False)
-    y0, x0 = 1.62, .62
+    y0, x0 = 1.68, .62
     for i, (a, lab) in enumerate([(1., 'Participant, precise'), (.2, 'Participant, noisy')]):
         ax.scatter([x0], [y0 - i * .14], s=8, color=mpl.colors.to_rgba(FG, a), lw=0, **k)
         ax.text(x0 + .012, y0 - i * .14, lab, fontsize=6, va='center', transform=ax.transAxes)
-    ax.plot([x0 + .17] * 2, [y0 - .07, y0 + .07], color=HIGH, lw=1.5, **k)
+    ax.plot([x0 + .17] * 2, [y0 - .045, y0 + .045], color=HIGH, lw=1.5, **k)
     ax.plot(x0 + .17, y0, 'o', ms=3.8, color=HIGH, **k)
     ax.text(x0 + .182, y0, 'Group, 95% HDI above 0', fontsize=6, va='center', transform=ax.transAxes)
-    ax.plot([x0 + .17] * 2, [y0 - .21, y0 - .07], color=LOW, lw=1.5, **k)
+    ax.plot([x0 + .17] * 2, [y0 - .185, y0 - .095], color=LOW, lw=1.5, **k)
     ax.plot(x0 + .17, y0 - .14, 'o', ms=3.8, color=LOW, **k)
     ax.text(x0 + .182, y0 - .14, 'Group, 95% HDI below 0', fontsize=6, va='center', transform=ax.transAxes)
-    ax.text(0, 1.62, 'Numbers: P(> 0)', transform=ax.transAxes, fontsize=6, color='.4', va='center')
+    ax.text(x0 - .008, y0 - .28, 'Numbers above panels: P(> 0)', transform=ax.transAxes, fontsize=6, color='.4', va='center')
     OUT.mkdir(parents=True, exist_ok=True)
     for ext in ('pdf', 'png'):
         fig.savefig(OUT / f'fig_value_all_rois_bayes.{ext}', dpi=300, bbox_inches='tight')
