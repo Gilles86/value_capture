@@ -5,6 +5,7 @@ pRFs and field widths fixed to the subject's all-trials fit, gains re-estimated 
 session x run x distractor value, gain in %. Model (bambi, Student-t likelihood for the noisy per-run fits):
 
     gain ~ high_minus_low + (high_minus_low | subject) + (1 | subject:session:run)
+    log sigma ~ 1 + (1 | subject)          (--noise subject, the default; --noise shared: one sigma)
 
 high_minus_low = +.5 / -.5, so its coefficient is the population high - low effect; the subject-level slopes shrink towards it, so a subject with a
 few wild runs no longer dominates as it does in a test on 12 independent per-subject fits. Reported: posterior mean,
@@ -46,22 +47,30 @@ def load(folder, rois, contrast='high_low'):
     return long.dropna(subset=['gain'])
 
 
-def fit(d, draws, tune, seed):
-    m = bmb.Model('gain ~ high_minus_low + (high_minus_low | subject) + (1 | run_id)', d, family='t')
+FORMULA = 'gain ~ high_minus_low + (high_minus_low | subject) + (1 | run_id)'
+
+
+def fit(d, draws, tune, seed, noise='subject'):
+    # noise='subject': every subject has its own residual scale (log sigma ~ 1 + (1 | subject)). The run-to-run spread
+    # of the gains differs about 15-fold between subjects (hV4: SD 50% to 875%), so one shared sigma lets the noisy
+    # subjects' runs count as much as the clean subjects' runs.
+    f = bmb.Formula(FORMULA, 'sigma ~ 1 + (1 | subject)') if noise == 'subject' else FORMULA
+    m = bmb.Model(f, d, family='t')
     idata = m.fit(draws=draws, tune=tune, chains=4, target_accept=.95, random_seed=seed, progressbar=False)
     return m, idata
 
 
-def main(folder, rois, draws, tune, save_idata, seed=0, contrast='high_low', min_subjects=5, per_subject=False):
+def main(folder, rois, draws, tune, save_idata, seed=0, contrast='high_low', min_subjects=5, per_subject=False,
+         noise='subject'):
     d_all = load(folder, rois, contrast)
-    tag = '' if contrast == 'high_low' else f'_{contrast}'
+    tag = ('' if contrast == 'high_low' else f'_{contrast}') + ('' if noise == 'subject' else '_sharednoise')
     rows, subj_rows = [], []
     for roi in rois:
         d = d_all[d_all.roi == roi]
         if d.subject.nunique() < min_subjects:
             print(roi, 'skipped:', d.subject.nunique(), 'subjects')
             continue
-        m, idata = fit(d, draws, tune, seed)
+        m, idata = fit(d, draws, tune, seed, noise)
         post = idata.posterior['high_minus_low'].values.ravel()
         hdi = az.hdi(post, hdi_prob=.95)
         summ = az.summary(idata, var_names=['high_minus_low', 'Intercept'], kind='diagnostics')
@@ -99,6 +108,8 @@ if __name__ == '__main__':
     ap.add_argument('--contrast', choices=list(CONTRASTS), default='high_low')
     ap.add_argument('--min-subjects', type=int, default=5)
     ap.add_argument('--per-subject', action='store_true')
+    ap.add_argument('--noise', choices=['subject', 'shared'], default='subject',
+                    help='Residual scale per subject (default) or one shared scale (output tag _sharednoise)')
     a = ap.parse_args()
     main(a.folder, a.rois, a.draws, a.tune, a.save_idata, contrast=a.contrast, min_subjects=a.min_subjects,
-         per_subject=a.per_subject)
+         per_subject=a.per_subject, noise=a.noise)

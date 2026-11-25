@@ -21,7 +21,11 @@ Does a high-value distractor get a larger attentional gain in visual cortex than
 - **Area:** hV4 (neuropythy), voxels with pRF R² >= .1; a subject enters with >= 10 such voxels.
 - **Statistic:** hierarchical Bayesian model of the per-run gains
   (`gainfield/hierarchical_value_gain.py`: `gain ~ high_minus_low + (high_minus_low | subject) + (1 | run)`,
-  Student-t), **P(high > low)**, posterior mean and 95% HDI. Directional: high > low.
+  Student-t, **residual scale per subject**: `log sigma ~ 1 + (1 | subject)`), **P(high > low)**, posterior mean and
+  95% HDI. Directional: high > low. (Amended 2026-11-25, see below.)
+- **Secondary statistic, all areas jointly:** the retsupp meta-analysis model (`gainfield/meta_value_gain.py`): one
+  estimate per subject x area with its standard error from the per-run gains, group (Early / Dorsal /
+  Occipito-temporal), area and subject effects.
 - **Secondary statistic (same fit):** one-sided Wilcoxon on the per-subject all-trials amplitudes, high > low.
 
 Command:
@@ -31,6 +35,14 @@ Command:
     python value_capture/gainfield/hierarchical_value_gain.py \
         --folder notes/data/gain_fields_dog_fbevents_free_exclude_widths --rois hV4
 
+## Amendment 2026-11-25: noise per subject
+
+The run-to-run spread of the hV4 gains differs about 15-fold between subjects (SD of per-run high - low 50% to 875%).
+With one shared residual scale the noisiest subjects' runs count as much as the cleanest subjects' runs, so the
+primary model now gives every subject its own residual scale (as in retsupp, where the group models weight each
+subject by its own standard error). Made before any pilot gain field had been fitted. The shared-scale result is kept
+as a robustness row (`--noise shared`).
+
 ## Everything else is robustness
 
 Other areas and pooled pathways; points subtracted / kept / pRF-overlap cut-off; measured response at the item;
@@ -38,9 +50,12 @@ decoding of the item and of the bar near it; colour x value split. Reported, unc
 
 ## Result on the main study (n = 11 in hV4; sub-12 has < 10 hV4 voxels with R² >= .1 in every fit)
 
-- Hierarchical: high - low = +123% gain (95% HDI 6 to 241), P(high > low) = .98. Converged (R-hat <= 1.01, no
-  divergences).
+- Hierarchical, residual scale per subject (primary): high - low = +78% gain (95% HDI 26 to 135),
+  P(high > low) = .996. Converged (R-hat <= 1.01, no divergences). Shared scale: +123% (6 to 241), P = .98.
+- Meta-analysis over areas, SE-weighted: hV4 +54% (15 to 96), P = .995; Student-t +34% (1 to 71), P = .986; without
+  SE weighting +83% (11 to 155), P = .986.
 - Wilcoxon: high +77% (FWHM 1.4 deg) vs low +30% (4.0 deg), p = .012 one-sided.
-- Same model in the other areas (secondary): V1 +1 (P = .72), V2 +10 (.85), V3 -22 (.08), LO -77 (HDI -149 to 3,
-  P = .02, i.e. the opposite direction), V3AB n = 5. The LO reversal is not significant either way but must be
-  reported next to the hV4 effect.
+- Same model in the other areas (secondary, per-subject scale): V1 +1 (P = .65), V2 +6 (.81), V3 -14 (.11),
+  LO -78 (HDI -155 to 3, P = .02, the opposite direction), V3AB n = 5. In the SE-weighted meta-analysis LO is
+  credibly negative (-80, HDI -123 to -37); the LO reversal must be reported next to the hV4 effect. The pathway
+  means are null (overall -8, HDI -26 to 11): hV4 and LO cancel within the occipito-temporal group.
