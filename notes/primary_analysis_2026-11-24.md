@@ -43,6 +43,26 @@ primary model now gives every subject its own residual scale (as in retsupp, whe
 subject by its own standard error). Made before any pilot gain field had been fitted. The shared-scale result is kept
 as a robustness row (`--noise shared`).
 
+## Amendment 2026-11-26: one field width as the key robustness model
+
+On the main data the free per-value field width mostly trades off with the gain: the high- and low-value widths do
+not differ in any area (Wilcoxon on log2 high/low width, p = .18 to 1; pooled over areas 6/12 subjects narrower,
+p = .57), widths run from 0.25 to 10.9 deg, and gain x sigma^2 shows no value effect in hV4. With one width shared by
+the high- and low-value distractor (`--tag fbevents_free_exclude`, no `--separate-widths`) the hV4 effect is about
+half as large and its HDI includes 0, and the LO reversal disappears.
+
+This was decided after seeing those main-study results, and after the pilot gain fields with separate widths had been
+fitted (not yet read). The declared primary model therefore stays unchanged for the pilot data. The shared-width
+model is added as the first robustness row, run on the pilot data with the same hierarchical model, and reported
+next to the primary whatever it shows. A value effect is only described as robust if it holds in both.
+
+Main study, shared width, hierarchical, residual scale per subject: hV4 +30% (HDI -9 to 69), P(high > low) = .955;
+LO -14% (-50 to 18), P = .16; V1 +2 (.74), V2 -2 (.33), V3 +2 (.54; 133 divergences, not converged), V3AB -10 (.20,
+n = 5). Meta-analysis, SE-weighted: hV4 +9 (-11 to 30), P = .79; overall 0 (-10 to 9).
+
+    python value_capture/gainfield/hierarchical_value_gain.py --folder notes/data/gain_fields_dog_fbevents_free_exclude
+    python value_capture/gainfield/meta_value_gain.py --folder notes/data/gain_fields_dog_fbevents_free_exclude
+
 ## Everything else is robustness
 
 Other areas and pooled pathways; points subtracted / kept / pRF-overlap cut-off; measured response at the item;

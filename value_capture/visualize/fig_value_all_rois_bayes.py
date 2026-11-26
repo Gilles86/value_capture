@@ -2,7 +2,9 @@
 
 Rows (all: trials without the points display):
 a  Gain field at the distractor, high - low (%; pRF-mapped areas only: VO, TO and IPS have almost no voxels with
-   pRF R2 >= .1). Model: per-run gains, ``gainfield/hierarchical_value_gain.py``.
+   pRF R2 >= .1). Model: per-run gains, ``gainfield/hierarchical_value_gain.py``. Default: one field width shared by
+   the high- and low-value distractor (``--widths separate``: each its own width, the declared primary model; the
+   free width mostly trades off with the gain).
 b  Mean response, high - low (% signal), colour as a covariate. ``decode/bayes_value_rois.py``.
 c  Decoding across sessions (colours swapped), AUC - .5 per test run: a value code that survives the colour swap.
 d  Mean response, green - orange (% signal): the colour term of the model in b.
@@ -11,8 +13,10 @@ Dots: participants (mean over runs), shaded by precision (1 / SE over runs): pal
 95% HDI of the per-ROI hierarchical model (Student-t, residual scale per participant); purple = HDI above 0, green =
 below 0. Right: pathway means and the overall mean of the SE-weighted meta-analysis over ROIs (retsupp model).
 
-    python value_capture/visualize/fig_value_all_rois_bayes.py
+    python value_capture/visualize/fig_value_all_rois_bayes.py [--widths shared|separate]
+Output: notes/figures/fig_value_all_rois_bayes.png (shared) or fig_value_all_rois_bayes_widths.png (separate)
 """
+import argparse
 import glob
 from pathlib import Path
 
@@ -28,7 +32,7 @@ from value_capture.visualize.fig_value_gain import DOUBLE, FG, HIGH, MUTED, offs
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / 'notes' / 'data'
 OUT = ROOT / 'notes' / 'figures'
-GF = 'gain_fields_dog_fbevents_free_exclude_widths'
+GF = {'shared': 'gain_fields_dog_fbevents_free_exclude', 'separate': 'gain_fields_dog_fbevents_free_exclude_widths'}
 LOW = '#009E73'
 GREEN, ORANGE = '#00ab78', '#d56f2c'
 LABEL = {'fusiform': 'Fusiform', 'parahippocampal': 'Parahipp.', 'entorhinal': 'Entorhinal', 'hippocampus': 'Hippoc.',
@@ -137,13 +141,14 @@ def colour_dots():
     return pd.DataFrame(rows)
 
 
-def main():
+def main(widths='shared'):
+    gf = GF[widths]
     bayes = rd('bayes_value_rois_exclude.tsv')
-    gf_meta, gf_data, gf_post = rd(f'meta_value_gain_{GF}.tsv'), rd(f'meta_value_gain_{GF}_data.tsv'), \
-        rd(f'hierarchical_value_gain_{GF}.tsv')
+    gf_meta, gf_data, gf_post = rd(f'meta_value_gain_{gf}.tsv'), rd(f'meta_value_gain_{gf}_data.tsv'), \
+        rd(f'hierarchical_value_gain_{gf}.tsv')
     fig, axes = plt.subplots(4, 1, figsize=(DOUBLE, 7.2), gridspec_kw=dict(hspace=.55))
     row(axes[0], gf_data, post_of(gf_post), gf_meta, 'High − low\ngain field (%)',
-        'Gain field at the distractor (pRF-mapped areas)', pad=40)
+        'Gain field at the distractor (pRF-mapped areas; ' + ('one field width' if widths == 'shared' else 'own width per value') + ')', pad=40)
     group_labels(axes[0])
     uni = 'univariate_high_minus_low'
     row(axes[1], rd(f'meta_value_rois_{uni}_exclude_data.tsv'), post_of(bayes, measure=uni, effect='value'),
@@ -175,10 +180,13 @@ def main():
     ax.text(x0 + .182, y0 - .14, 'Group, 95% HDI below 0', fontsize=6, va='center', transform=ax.transAxes)
     ax.text(x0 - .008, y0 - .28, 'Numbers above panels: P(> 0)', transform=ax.transAxes, fontsize=6, color='.4', va='center')
     OUT.mkdir(parents=True, exist_ok=True)
+    name = 'fig_value_all_rois_bayes' + ('' if widths == 'shared' else '_widths')
     for ext in ('pdf', 'png'):
-        fig.savefig(OUT / f'fig_value_all_rois_bayes.{ext}', dpi=300, bbox_inches='tight')
-    print(OUT / 'fig_value_all_rois_bayes.png')
+        fig.savefig(OUT / f'{name}.{ext}', dpi=300, bbox_inches='tight')
+    print(OUT / f'{name}.png')
 
 
 if __name__ == '__main__':
-    main()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--widths', choices=list(GF), default='shared')
+    main(ap.parse_args().widths)
